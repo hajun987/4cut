@@ -80,8 +80,8 @@ export default function Home() {
             시작하기
           </button>
         </div>
-        <a href="/admin" className="absolute bottom-6 right-8 text-sm font-semibold text-zinc-300 hover:text-zinc-500 z-50 transition-colors">
-          Admin
+        <a href="/admin" className="absolute bottom-6 right-8 text-[8px] font-semibold text-zinc-300 hover:text-zinc-500 z-50 transition-colors">
+          Admin ({process.env.NEXT_PUBLIC_API_URL || "local:4000"})
         </a>
       </div>
     );
@@ -99,8 +99,8 @@ export default function Home() {
           setIsCapturing={setIsCapturing}
           onComplete={() => setStep("SELECTION")}
         />
-        <a href="/admin" className="absolute bottom-6 right-8 text-sm font-semibold text-zinc-300 hover:text-zinc-500 z-50 transition-colors">
-          Admin
+        <a href="/admin" className="absolute bottom-6 right-8 text-[8px] font-semibold text-zinc-300 hover:text-zinc-500 z-50 transition-colors">
+          Admin ({process.env.NEXT_PUBLIC_API_URL || "local:4000"})
         </a>
       </div>
     );
