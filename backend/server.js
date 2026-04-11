@@ -9,9 +9,17 @@ const ffmpegInstaller = require("@ffmpeg-installer/ffmpeg");
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 4000;
-// 환경 변수가 없으면 요청마다 동적으로 감지합니다.
 const BASE_URL = process.env.BACKEND_URL;
+
+// 현재 요청을 바탕으로 서비스의 기본 주소(Base URL)를 결정하는 헬퍼 함수
+const getCurrentBaseUrl = (req) => {
+  if (BASE_URL) return BASE_URL;
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.get('host');
+  return `${protocol}://${host}`;
+};
 
 // CORS 설정: 배포 환경에서는 보안을 위해 실제 프론트엔드 주소만 허용하도록 설정 가능
 app.use(cors({
@@ -61,9 +69,7 @@ app.post("/api/config", (req, res) => {
 app.post("/api/save-result", uploadResult.single("image"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   
-  const host = req.get('host');
-  const protocol = req.protocol === 'http' && host.includes('render.com') ? 'https' : req.protocol;
-  const currentBase = BASE_URL || `${protocol}://${host}`;
+  const currentBase = getCurrentBaseUrl(req);
   const fileUrl = `${currentBase}/uploads/results/${req.file.filename}`;
   res.json({ url: fileUrl, filename: req.file.filename });
 });
@@ -132,7 +138,10 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
       .outputOptions(['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-t', '4', '-shortest'])
       .save(outPath)
       .on('start', (cmd) => console.log('[FFmpeg] cmd:', cmd))
-      .on('end', () => { console.log('[FFmpeg] Done:', outFilename); res.json({ url: `${BASE_URL}/uploads/results/${outFilename}` }); })
+      .on('end', () => { 
+        console.log('[FFmpeg] Done:', outFilename); 
+        res.json({ url: `${getCurrentBaseUrl(req)}/uploads/results/${outFilename}` }); 
+      })
       .on('error', (err) => { console.error('[FFmpeg] Error:', err.message); res.status(500).json({error: 'encoding failed: ' + err.message}); });
   } else {
     // 외부 PNG 프레임일 경우
@@ -173,7 +182,10 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
       .outputOptions(['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-t', '4', '-shortest'])
       .save(outPath)
       .on('start', (cmd) => console.log('[FFmpeg] cmd:', cmd))
-      .on('end', () => { console.log('[FFmpeg] Done:', outFilename); res.json({ url: `${BASE_URL}/uploads/results/${outFilename}` }); })
+      .on('end', () => { 
+        console.log('[FFmpeg] Done:', outFilename); 
+        res.json({ url: `${getCurrentBaseUrl(req)}/uploads/results/${outFilename}` }); 
+      })
       .on('error', (err) => { console.error('[FFmpeg] Error:', err.message); res.status(500).json({error: 'encoding failed: ' + err.message}); });
   }
 });
@@ -184,9 +196,7 @@ app.use("/external-frames", express.static(externalFrameDir));
 app.get("/api/frames-list", (req, res) => {
   if (!fs.existsSync(externalFrameDir)) return res.json([]);
   const files = fs.readdirSync(externalFrameDir).filter(f => f.toLowerCase().endsWith(".png") || f.toLowerCase().endsWith(".jpg"));
-  const host = req.get('host');
-  const protocol = req.protocol === 'http' && host.includes('render.com') ? 'https' : req.protocol;
-  const currentBase = BASE_URL || `${protocol}://${host}`;
+  const currentBase = getCurrentBaseUrl(req);
   const urls = files.map(f => `${currentBase}/external-frames/${encodeURIComponent(f)}`);
   res.json(urls);
 });
@@ -199,10 +209,7 @@ const uploadFrameExternal = multer({ storage: frameStorageExternal });
 
 app.post("/api/frame-external", uploadFrameExternal.single("frame"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  const host = req.get('host');
-  const protocol = req.protocol === 'http' && host.includes('render.com') ? 'https' : req.protocol;
-  const currentBase = BASE_URL || `${protocol}://${host}`;
-  res.json({ url: `${currentBase}/external-frames/${encodeURIComponent(req.file.filename)}` });
+  res.json({ url: `${getCurrentBaseUrl(req)}/external-frames/${encodeURIComponent(req.file.filename)}` });
 });
 
 app.delete("/api/frame-external/:name", (req, res) => {
