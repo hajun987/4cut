@@ -28,15 +28,15 @@ export default function AdminPage() {
 
   const fetchConfig = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/config`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/config`);
       if (res.ok) {
         const data = await res.json();
         setIntervalSeconds(data.intervalSeconds || 6);
         setMaxShots(data.maxShots || 6);
         setReadySeconds(data.readySeconds || 10);
       }
-    } catch(e) {
-      console.warn("Backend config fetch failed", e);
+    } catch {
+      console.warn("Backend config fetch failed");
     }
   };
 
@@ -47,8 +47,8 @@ export default function AdminPage() {
         const data = await res.json();
         setFrames(data);
       }
-    } catch(e) {
-      console.warn("Frames list fetch failed", e);
+    } catch {
+      console.warn("Frames list fetch failed");
     }
   };
 
@@ -61,7 +61,7 @@ export default function AdminPage() {
         body: JSON.stringify({ intervalSeconds, maxShots, readySeconds })
       });
       alert("설정이 저장되었습니다.");
-    } catch(e) {
+    } catch {
       alert("설정 저장 실패");
     }
     setIsSaving(false);
@@ -82,7 +82,7 @@ export default function AdminPage() {
         alert("성공적으로 업로드되었습니다.");
         fetchFrames();
       }
-    } catch(e) {
+    } catch {
       alert("업로드 실패");
     }
   };
@@ -99,7 +99,7 @@ export default function AdminPage() {
       });
       alert("삭제되었습니다.");
       fetchFrames();
-    } catch(e) {
+    } catch {
       alert("삭제 중 오류가 발생했습니다.");
     }
   };

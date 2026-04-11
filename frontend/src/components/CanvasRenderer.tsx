@@ -56,8 +56,8 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
           try {
             const img = await loadImage(selectedSlots[i]);
             ctx.drawImage(img, coordinates[i].x, coordinates[i].y, coordinates[i].w, coordinates[i].h);
-          } catch (err) {
-            console.error("Image load fail", err);
+          } catch {
+            console.error("Image load fail");
           }
       }
 
@@ -180,8 +180,8 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
             document.body.removeChild(a);
             URL.revokeObjectURL(objUrl);
           }, 5000);
-        } catch (e) {
-          console.warn("다운로드 실패, 폴백 시도:", e);
+        } catch {
+          console.warn("다운로드 실패, 폴백 시도:");
           window.open(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/download/${serverFile}?name=${encodeURIComponent(saveName)}`, "_blank");
         }
       };
@@ -195,7 +195,7 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
             triggerDownload(uploadedVideoId, `4cut_video_${Date.now()}.mp4`);
           }, 1500);
         }
-      } catch(e) { console.warn("자동 다운로드 처리 중 오류:", e); }
+      } catch { console.warn("자동 다운로드 처리 중 오류 발생"); }
 
       setTimeout(() => {
         onUploaded(finalImageUrl, finalImageId, uploadedVideoId);

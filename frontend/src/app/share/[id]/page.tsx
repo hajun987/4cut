@@ -25,7 +25,7 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
       } else {
         setTimestampStr(new Date().toLocaleString("ko-KR"));
       }
-    } catch(e) {
+    } catch {
       setTimestampStr("");
     }
   }, [id]);
@@ -46,8 +46,8 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
         document.body.removeChild(a);
         URL.revokeObjectURL(objUrl);
       }, 5000);
-    } catch (e) {
-      console.warn("다운로드 실패, 폴백 시도:", e);
+    } catch {
+      console.warn("다운로드 실패, 폴백 시도:");
       window.open(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/download/${serverFile}?name=${encodeURIComponent(saveName)}`, "_blank");
     }
   };
