@@ -99,6 +99,27 @@ const getCurrentBaseUrl = (req) => {
   return `${protocol}://${host}`;
 };
 
+// 프레임 이미지를 로컬로 잠시 내려받는 헬퍼 함수 (FFmpeg 안정성 및 SIGSEGV 방지용)
+function downloadFrameTemp(url, destPath) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(destPath);
+    https.get(url, (response) => {
+      if (response.statusCode !== 200) {
+        reject(new Error(`프레임 다운로드 실패: ${response.statusCode}`));
+        return;
+      }
+      response.pipe(file);
+      file.on('finish', () => {
+        file.close();
+        resolve(destPath);
+      });
+    }).on('error', (err) => {
+      if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+      reject(err);
+    });
+  });
+}
+
 // CORS 설정: 배포 환경에서는 보안을 위해 실제 프론트엔드 주소만 허용하도록 설정 가능
 app.use(cors({
   origin: "*", // 테스트 단계에서는 모두 허용, 추후 FRONTEND_URL로 제한 가능
@@ -121,6 +142,7 @@ const externalFrameDir = path.join(__dirname, "external-frames");
 if (!fs.existsSync(resultDir)) fs.mkdirSync(resultDir, { recursive: true });
 if (!fs.existsSync(externalFrameDir)) fs.mkdirSync(externalFrameDir, { recursive: true });
 if (!fs.existsSync("uploads/frames")) fs.mkdirSync("uploads/frames", { recursive: true });
+if (!fs.existsSync("backend/uploads/temp")) fs.mkdirSync("backend/uploads/temp", { recursive: true });
 
 const resultStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, resultDir),
@@ -249,24 +271,32 @@ const videoStorage = multer.diskStorage({
 const uploadVideo = multer({ storage: videoStorage, limits: { fileSize: 100 * 1024 * 1024 } });
 
 // 라이브 멀티그리드 비디오 생성 API
-app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
+app.post("/api/save-video", uploadVideo.array("videos", 4), async (req, res) => {
   console.log("[Video] Received files:", req.files ? req.files.length : 0);
   if (!req.files || req.files.length !== 4) {
     console.error("[Video] Expected 4 files, got:", req.files ? req.files.length : 0);
     return res.status(400).json({ error: "4 videos required, got: " + (req.files ? req.files.length : 0) });
   }
   
-  const frameStr = req.body.frame; // e.g., "#FF4785" or "http://localhost:4000/external-frames/..."
-  const outFilename = `result_vid_${Date.now()}.mp4`;
+  const frameStr = req.body.frame; 
+  const timestamp = Date.now();
+  const outFilename = `result_vid_${timestamp}.mp4`;
   const outPath = path.join(__dirname, "uploads/results", outFilename);
+  const tempDir = path.join(__dirname, "uploads/temp");
 
   let command = ffmpeg();
-  // 4개의 비디오 원격 파일 로드
   req.files.forEach(f => command.input(f.path));
 
-  // 센터크롭 필터: 사진 영역을 1px씩 확장하여 틈새 방지 (463x689 -> 465x691)
   const cropFilter = 'hflip,scale=-2:691,crop=465:691,setsar=1';
   let filterComplex = '';
+  let tempFramePath = ""; // 임시 프레임 파일 경로 보관용
+
+  // 임시 데이터 청소 함수 (메모리 및 용량 관리)
+  const cleanup = () => {
+    if (tempFramePath && fs.existsSync(tempFramePath)) {
+      fs.unlink(tempFramePath, () => console.log("[Cleanup] Temp frame deleted."));
+    }
+  };
 
   if (frameStr && frameStr.startsWith('#')) {
     // 단색 프레임일 경우
@@ -288,9 +318,9 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
         '-pix_fmt', 'yuv420p', 
         '-t', '4', 
         '-shortest',
-        '-preset', 'ultrafast', // 메모리 점유 시간 최소화
-        '-threads', '1',        // CPU 및 메모리 피크 억제
-        '-crf', '28'            // 부하 최적화
+        '-preset', 'ultrafast',
+        '-threads', '1',
+        '-crf', '28'
       ])
       .save(outPath)
       .on('start', (cmd) => console.log('[FFmpeg] cmd:', cmd))
@@ -315,11 +345,18 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
         }
       });
   } else {
-    // 외부 PNG 프레임일 경우
-    let framePath = "";
+    // 외부 PNG 프레임일 경우 (R2 URL 또는 로컬 경로)
     let frameInput = "";
     if (frameStr && frameStr.startsWith("http")) {
-       frameInput = frameStr;
+       // [이중 잠금] 클라우드 주소인 경우 로컬 temp 폴더로 선(先) 다운로드
+       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+       tempFramePath = path.join(tempDir, `temp_frame_${timestamp}.png`);
+       try {
+         console.log("[Video] Downloading frame to local cache:", frameStr);
+         frameInput = await downloadFrameTemp(frameStr, tempFramePath);
+       } catch (err) {
+         console.error("[Video] Frame download failed, fallback to white:", err);
+       }
     } else if (frameStr && frameStr.includes("/external-frames/")) {
        const parts = frameStr.split("/external-frames/");
        const localPath = path.join(externalFrameDir, decodeURIComponent(parts[1]));
@@ -359,14 +396,15 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
         '-pix_fmt', 'yuv420p', 
         '-t', '4', 
         '-shortest',
-        '-preset', 'ultrafast', // 메모리 점유 시간 최소화
-        '-threads', '1',        // CPU 및 메모리 피크 억제 (무료 티어 최적화)
-        '-crf', '28'            // 용량 및 부하 최적화
+        '-preset', 'ultrafast',
+        '-threads', '1',
+        '-crf', '28'
       ])
       .save(outPath)
       .on('start', (cmd) => console.log('[FFmpeg] cmd:', cmd))
       .on('end', async () => { 
         console.log('[FFmpeg] Done:', outFilename); 
+        cleanup(); // 임시 프레임 삭제
         try {
           const r2Url = await uploadFileToR2(outPath, outFilename, "results");
           if (!res.headersSent) {
@@ -381,6 +419,7 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
       })
       .on('error', (err) => { 
         console.error('[FFmpeg] Error:', err.message); 
+        cleanup(); // 에러 발생 시에도 청소
         if (!res.headersSent) {
           res.status(500).json({error: 'encoding failed: ' + err.message}); 
         }
@@ -422,9 +461,8 @@ app.get("/api/frames-list", async (req, res) => {
 const frameStorageExternal = multer.diskStorage({
   destination: (req, file, cb) => cb(null, externalFrameDir),
   filename: (req, file, cb) => {
-    // 한글 파일명 깨짐 방지
-    const original = file.originalname;
-    cb(null, original);
+    // 보안 및 한글 이슈 방지를 위해 타임스탬프 기반 파일명 강제 적용 (Safe Renaming)
+    cb(null, `frame_${Date.now()}.png`);
   }
 });
 const uploadFrameExternal = multer({ storage: frameStorageExternal });
