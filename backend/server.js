@@ -11,6 +11,8 @@ const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { Upload } = require("@aws-sdk/lib-storage");
 const mime = require("mime-types");
 
+const https = require("https");
+
 const app = express();
 app.set('trust proxy', true);
 
@@ -143,6 +145,32 @@ app.post("/api/config", async (req, res) => {
   res.json(config);
 });
 
+/**
+ * [CORS 해결용 이미지 프록시]
+ * R2에서 직접 불러올 때 발생하는 CORS 보안 문제를 해결하기 위해 서버가 대신 이미지를 내려받아 전달합니다.
+ * 스트림 방식을 사용하여 서버 메모리 점유를 최소화합니다.
+ */
+app.get("/api/proxy-image", (req, res) => {
+  const imageUrl = req.query.url;
+  if (!imageUrl) return res.status(400).send("URL이 필요합니다.");
+
+  try {
+    https.get(imageUrl, (proxyRes) => {
+      if (proxyRes.statusCode !== 200) {
+        return res.status(proxyRes.statusCode).send("이미지를 불러올 수 없습니다.");
+      }
+      res.setHeader("Content-Type", proxyRes.headers["content-type"] || "image/png");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      proxyRes.pipe(res);
+    }).on("error", (err) => {
+      console.error("[Proxy Error]", err);
+      res.status(500).send("이미지 프록시 오류");
+    });
+  } catch (err) {
+    res.status(500).send("프록시 처리 실패");
+  }
+});
+
 // 결과 사진 저장 (QR 제공 목적)
 app.post("/api/save-result", uploadResult.single("image"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -243,7 +271,15 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
 
     command
       .complexFilter(filterComplex, 'out')
-      .outputOptions(['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-t', '4', '-shortest'])
+      .outputOptions([
+        '-c:v', 'libx264', 
+        '-pix_fmt', 'yuv420p', 
+        '-t', '4', 
+        '-shortest',
+        '-preset', 'ultrafast', // 메모리 점유 시간 최소화
+        '-threads', '1',        // CPU 및 메모리 피크 억제
+        '-crf', '28'            // 부하 최적화
+      ])
       .save(outPath)
       .on('start', (cmd) => console.log('[FFmpeg] cmd:', cmd))
       .on('end', async () => { 
@@ -302,7 +338,15 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
 
     command
       .complexFilter(filterComplex, 'out')
-      .outputOptions(['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-t', '4', '-shortest'])
+      .outputOptions([
+        '-c:v', 'libx264', 
+        '-pix_fmt', 'yuv420p', 
+        '-t', '4', 
+        '-shortest',
+        '-preset', 'ultrafast', // 메모리 점유 시간 최소화
+        '-threads', '1',        // CPU 및 메모리 피크 억제 (무료 티어 최적화)
+        '-crf', '28'            // 용량 및 부하 최적화
+      ])
       .save(outPath)
       .on('start', (cmd) => console.log('[FFmpeg] cmd:', cmd))
       .on('end', async () => { 
