@@ -11,7 +11,8 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
   const vid = searchParams.get("vid");
   
   const { id } = resolvedParams;
-  const imageUrl = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/uploads/results/${id}`;
+  const r2BaseUrl = process.env.NEXT_PUBLIC_R2_URL || "https://pub-1bb31f7734c744dcbe3d3a0e03d4a6a2.r2.dev";
+  const imageUrl = `${r2BaseUrl}/results/${id}`;
 
   useEffect(() => {
     try {
@@ -31,31 +32,15 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
   }, [id]);
 
   const handleManualDownload = async (serverFile: string, saveName: string) => {
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/download/${serverFile}?name=${encodeURIComponent(saveName)}`);
-      if (!res.ok) throw new Error("Download failed");
-      const blob = await res.blob();
-      const objUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.style.display = "none";
-      a.href = objUrl;
-      a.download = saveName;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(objUrl);
-      }, 5000);
-    } catch {
-      console.warn("다운로드 실패, 폴백 시도:");
-      window.open(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/download/${serverFile}?name=${encodeURIComponent(saveName)}`, "_blank");
-    }
+    // R2 주소로 직접 연결하여 다운로드 유도
+    const downloadUrl = `${r2BaseUrl}/results/${serverFile}`;
+    window.open(downloadUrl, "_blank");
   };
 
   const doDownload = handleManualDownload;
 
   return (
-    <div className="bg-[#f8f9fa] text-black px-4 py-6">
+    <div className="bg-[#f8f9fa] text-black px-4 py-6 min-h-screen">
       <div className="bg-red-500 text-white text-center py-2 text-sm font-bold rounded-xl mb-6">
         ⚠️ 24시간 이후 링크가 영구 만료됩니다.
       </div>
@@ -78,13 +63,13 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
       {vid && (
         <>
           <video 
-            src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/uploads/results/${vid}`} 
+            src={`${r2BaseUrl}/results/${vid}`} 
             controls autoPlay loop muted playsInline 
             className="w-full rounded-xl shadow-lg border border-zinc-200 mb-4 mt-4" 
           />
           <button 
             onClick={() => doDownload(vid, `4cut_video.mp4`)}
-            className="flex items-center justify-center gap-3 w-full py-4 bg-primary text-white font-bold rounded-2xl active:scale-95"
+            className="flex items-center justify-center gap-3 w-full py-4 bg-[#FF4785] text-white font-bold rounded-2xl active:scale-95"
           >
             <Film size={20} />
             동영상 다운로드 받기

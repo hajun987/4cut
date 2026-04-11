@@ -148,54 +148,48 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
            });
            
            if (videoRes.ok) {
-             const vData = await videoRes.json();
-             uploadedVideoUrl = vData.url;
-             const parts = uploadedVideoUrl.split("/");
-             uploadedVideoId = parts[parts.length - 1];
-           } else {
-             const errBody = await videoRes.text();
-             console.error("[Video] Server error:", videoRes.status, errBody);
-           }
+            if (videoRes.ok) {
+              const vData = await videoRes.json();
+              uploadedVideoUrl = vData.url;
+              // R2 URL(https://.../results/filename.mp4)에서 파일명만 추출
+              const parts = uploadedVideoUrl.split("/");
+              uploadedVideoId = parts[parts.length - 1];
+            } else {
+              const errBody = await videoRes.text();
+              console.error("[Video] Server error:", videoRes.status, errBody);
+            }
+          }
+       } catch (e) {
+          console.error("비디오 렌더링 실패:", e);
+       }
+ 
+       setLoadingText("완료되었습니다!");
+ 
+       // 자동 다운로드 - Cloudflare R2에서 직접 다운로드하도록 최적화 (502 에러 방지)
+       const triggerDownload = (fileName: string) => {
+         const r2BaseUrl = process.env.NEXT_PUBLIC_R2_URL || "https://pub-1bb31f7734c744dcbe3d3a0e03d4a6a2.r2.dev";
+         const folder = fileName.startsWith("frame_") ? "frames" : "results";
+         const downloadUrl = `${r2BaseUrl}/${folder}/${fileName}`;
+         
+         const a = document.createElement("a");
+         a.href = downloadUrl;
+         a.download = fileName; // 브라우저 정책상 도메인이 다르면 작동 안 할 수 있어 새 창 열기 병행
+         a.target = "_blank";
+         document.body.appendChild(a);
+         a.click();
+         document.body.removeChild(a);
+       };
+ 
+       try {
+         if (finalImageId) {
+           triggerDownload(finalImageId);
          }
-      } catch (e) {
-         console.error("비디오 렌더링 실패:", e);
-      }
-
-      setLoadingText("완료되었습니다!");
-
-      // 자동 다운로드 - fetch -> Blob -> a[download] 방식 (가장 확실하게 파일명 보장)
-      const triggerDownload = async (serverFile: string, saveName: string) => {
-        try {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/download/${serverFile}?name=${encodeURIComponent(saveName)}`);
-          if (!res.ok) throw new Error("Download failed");
-          const blob = await res.blob();
-          const objUrl = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.style.display = "none";
-          a.href = objUrl;
-          a.download = saveName;
-          document.body.appendChild(a);
-          a.click();
-          setTimeout(() => {
-            document.body.removeChild(a);
-            URL.revokeObjectURL(objUrl);
-          }, 5000);
-        } catch {
-          console.warn("다운로드 실패, 폴백 시도:");
-          window.open(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/download/${serverFile}?name=${encodeURIComponent(saveName)}`, "_blank");
-        }
-      };
-
-      try {
-        if (finalImageId) {
-          triggerDownload(finalImageId, `4cut_photo_${Date.now()}.jpg`);
-        }
-        if (uploadedVideoId) {
-          setTimeout(() => {
-            triggerDownload(uploadedVideoId, `4cut_video_${Date.now()}.mp4`);
-          }, 1500);
-        }
-      } catch { console.warn("자동 다운로드 처리 중 오류 발생"); }
+         if (uploadedVideoId) {
+           setTimeout(() => {
+             triggerDownload(uploadedVideoId);
+           }, 1500);
+         }
+       } catch { console.warn("자동 다운로드 처리 중 오류 발생"); }
 
       setTimeout(() => {
         onUploaded(finalImageUrl, finalImageId, uploadedVideoId);

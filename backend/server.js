@@ -30,23 +30,60 @@ const s3Client = new S3Client({
   },
 });
 
-// 파일 업로드 헬퍼 함수
-async function uploadFileToR2(filePath, fileName) {
+// 파일 업로드 헬퍼 함수 (폴더 구조 지원)
+async function uploadFileToR2(filePath, fileName, folder = "results") {
   const fileStream = fs.createReadStream(filePath);
   const contentType = mime.lookup(filePath) || "application/octet-stream";
+  const key = `${folder}/${fileName}`;
 
   const upload = new Upload({
     client: s3Client,
     params: {
       Bucket: R2_BUCKET_NAME,
-      Key: fileName,
+      Key: key,
       Body: fileStream,
       ContentType: contentType,
     },
   });
 
   await upload.done();
-  return `${R2_PUBLIC_URL}/${fileName}`;
+  return `${R2_PUBLIC_URL}/${key}`;
+}
+
+// 서비스 설정 보존 로직
+const CONFIG_KEY = "system/config.json";
+
+async function saveConfigToR2() {
+  try {
+    const configData = JSON.stringify(config);
+    const command = new PutObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: CONFIG_KEY,
+      Body: configData,
+      ContentType: "application/json",
+    });
+    await s3Client.send(command);
+    console.log("[R2] Config saved successfully.");
+  } catch (err) {
+    console.error("[R2] Config save failed:", err);
+  }
+}
+
+const { GetObjectCommand } = require("@aws-sdk/client-s3");
+async function loadConfigFromR2() {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: CONFIG_KEY,
+    });
+    const response = await s3Client.send(command);
+    const bodyContents = await response.Body.transformToString();
+    const savedConfig = JSON.parse(bodyContents);
+    config = { ...config, ...savedConfig };
+    console.log("[R2] Config loaded successfully:", config);
+  } catch (err) {
+    console.log("[R2] No saved config found, using defaults.");
+  }
 }
 
 const PORT = process.env.PORT || 4000;
@@ -97,10 +134,12 @@ const uploadFrame = multer({ storage: frameStorage });
 
 // 설정 라우터
 app.get("/api/config", (req, res) => res.json(config));
-app.post("/api/config", (req, res) => {
+app.post("/api/config", async (req, res) => {
   if (req.body.intervalSeconds) config.intervalSeconds = req.body.intervalSeconds;
   if (req.body.maxShots) config.maxShots = req.body.maxShots;
   if (req.body.readySeconds) config.readySeconds = req.body.readySeconds;
+  
+  await saveConfigToR2(); // R2에 즉시 영구 저장
   res.json(config);
 });
 
@@ -109,38 +148,58 @@ app.post("/api/save-result", uploadResult.single("image"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   
   try {
-    const r2Url = await uploadFileToR2(req.file.path, req.file.filename);
+    const r2Url = await uploadFileToR2(req.file.path, req.file.filename, "results");
     res.json({ url: r2Url, filename: req.file.filename });
   } catch (err) {
     console.error("[R2 Upload Error]", err);
-    // 폴백: R2 업로드 실패 시 기존 방식(로컬 주소)으로 응답 시도
+    // 폴백: R2 업로드 실패 시 로컬 주소로 응답 (results 폴더 경로 포함)
     const currentBase = getCurrentBaseUrl(req);
-    const fileUrl = `${currentBase}/uploads/results/${req.file.filename}`;
+    const fileUrl = `${currentBase}/results/${req.file.filename}`;
     res.json({ url: fileUrl, filename: req.file.filename });
   }
 });
 
 // 강제 다운로드 엔드포인트 (Content-Disposition 헤더로 파일명 강제 지정)
 app.get("/api/download/:filename", (req, res) => {
-  try {
-    const filename = req.params.filename;
-    const filePath = path.join(resultDir, filename);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
-    
+  const filename = req.params.filename;
+  if (!filename) return res.status(400).json({ error: "Missing filename" });
+
+  const targetPath = path.join(resultDir, filename);
+
+  if (fs.existsSync(targetPath)) {
     const downloadName = req.query.name || filename;
     const encodedName = encodeURIComponent(downloadName);
-    
     res.setHeader("Content-Disposition", `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
-    
     if (filename.endsWith('.mp4')) res.setHeader("Content-Type", "video/mp4");
-    else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) res.setHeader("Content-Type", "image/jpeg");
-    
-    res.sendFile(filePath);
-  } catch (err) {
-    console.error("[Download] Error:", err);
-    if (!res.headersSent) res.status(500).json({ error: "Download failed" });
+    else if (filename.endsWith('.jpg')) res.setHeader("Content-Type", "image/jpeg");
+    res.sendFile(targetPath);
+  } else {
+    // 로컬에 파일이 없으면 R2로 리다이렉트하여 502/404 방지
+    const r2Url = `${R2_PUBLIC_URL}/results/${filename}`;
+    console.log("[Download] Local file missing, redirecting to R2:", r2Url);
+    res.redirect(r2Url);
   }
 });
+
+// 정적 파일(/results) 및 과거 경로 요청 시에도 로컬에 없으면 R2로 연결
+app.use("/results", (req, res, next) => {
+  const filename = req.path.split("/").pop();
+  if (filename && filename.includes(".")) {
+    const targetPath = path.join(resultDir, filename);
+    if (!fs.existsSync(targetPath)) {
+      return res.redirect(`${R2_PUBLIC_URL}/results/${filename}`);
+    }
+  }
+  next();
+}, express.static(resultDir));
+
+app.use("/uploads/results", (req, res, next) => {
+  const filename = req.path.split("/").pop();
+  if (filename && filename.includes(".")) {
+    return res.redirect(`${R2_PUBLIC_URL}/results/${filename}`);
+  }
+  next();
+}, express.static(resultDir));
 
 // 비디오 파일들 보관소
 const videoStorage = multer.diskStorage({
@@ -249,14 +308,14 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
       .on('end', async () => { 
         console.log('[FFmpeg] Done:', outFilename); 
         try {
-          const r2Url = await uploadFileToR2(outPath, outFilename);
+          const r2Url = await uploadFileToR2(outPath, outFilename, "results");
           if (!res.headersSent) {
             res.json({ url: r2Url }); 
           }
         } catch (uploadErr) {
           console.error("[R2 Video Upload Error]", uploadErr);
           if (!res.headersSent) {
-            res.json({ url: `${getCurrentBaseUrl(req)}/uploads/results/${outFilename}` }); 
+            res.json({ url: `${getCurrentBaseUrl(req)}/results/${outFilename}` }); 
           }
         }
       })
@@ -276,15 +335,16 @@ const { ListObjectsV2Command } = require("@aws-sdk/client-s3");
 
 app.get("/api/frames-list", async (req, res) => {
   try {
-    // Cloudflare R2에서 파일 목록 직접 조회
+    // Cloudflare R2에서 frames/ 폴더 내 파일만 필터링하여 조회
     const command = new ListObjectsV2Command({
-      Bucket: R2_BUCKET_NAME
+      Bucket: R2_BUCKET_NAME,
+      Prefix: "frames/"
     });
     
     const { Contents } = await s3Client.send(command);
     if (!Contents) return res.json([]);
     
-    // png, jpg 확장자를 가진 파일만 필터링하여 전체 URL 생성
+    // 파일명만 추출하여 공용 URL 생성
     const urls = Contents
       .filter(obj => obj.Key.toLowerCase().endsWith(".png") || obj.Key.toLowerCase().endsWith(".jpg"))
       .map(obj => `${R2_PUBLIC_URL}/${encodeURIComponent(obj.Key)}`);
@@ -292,10 +352,9 @@ app.get("/api/frames-list", async (req, res) => {
     res.json(urls);
   } catch (err) {
     console.error("[R2 List Error]", err);
-    // 폴백: R2 조회 실패 시 로컬 파일 시스템에서 조회
     if (!fs.existsSync(externalFrameDir)) return res.json([]);
     const files = fs.readdirSync(externalFrameDir).filter(f => f.toLowerCase().endsWith(".png") || f.toLowerCase().endsWith(".jpg"));
-    const urls = files.map(f => `${R2_PUBLIC_URL}/${encodeURIComponent(f)}`);
+    const urls = files.map(f => `${R2_PUBLIC_URL}/frames/${encodeURIComponent(f)}`);
     res.json(urls);
   }
 });
@@ -314,7 +373,7 @@ app.post("/api/frame-external", uploadFrameExternal.single("frame"), async (req,
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   
   try {
-    const r2Url = await uploadFileToR2(req.file.path, req.file.filename);
+    const r2Url = await uploadFileToR2(req.file.path, req.file.filename, "frames");
     res.json({ url: r2Url });
   } catch (err) {
     console.error("[R2 Frame Upload Error]", err);
@@ -378,6 +437,7 @@ cron.schedule("0 * * * *", () => {
   console.log(`[Cron] 처리 완료. 삭제된 파일 수: ${deletedCount}`);
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Backend server listening at http://localhost:${PORT}`);
+  await loadConfigFromR2(); // 서버 시작 시 R2에서 설정 불러오기
 });
