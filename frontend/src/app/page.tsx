@@ -23,41 +23,40 @@ export default function Home() {
   const [secretFrameMap, setSecretFrameMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    // 1. URL에서 비밀 코드 감지
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     if (code) setSecretCode(code);
 
-    // 2. 전체 설정 및 프레임 목록 로드
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-    
-    // 비밀 프레임 매핑 정보 가져오기
-    fetch(`${apiUrl}/api/config`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.secretFrames) {
-          setSecretFrameMap(data.secretFrames);
-          // 코드가 있고 매핑된 프레임이 있다면 즉시 선택
-          if (code && data.secretFrames[code]) {
-            setSelectedFrame(data.secretFrames[code]);
-          }
-        }
-      });
+    async function loadInitialData() {
+      try {
+        // 1. 서버 설정(비밀 프레임 정보 포함)을 먼저 가져옴
+        const configRes = await fetch(`${apiUrl}/api/config`);
+        const configData = await configRes.json();
+        
+        const secretMap = configData.secretFrames || {};
+        setSecretFrameMap(secretMap);
 
-    fetch(`${apiUrl}/api/frames-list`)
-      .then(res => res.json())
-      .then(data => {
-        if(Array.isArray(data)) {
-          // 비밀 코드가 부여된 프레임들은 일반 목록에서 숨김 처리
-          // (비밀 프레임 데이터 구조에서 값들(URLs)만 추출하여 필터링)
-          fetch(`${apiUrl}/api/config`).then(r => r.json()).then(configData => {
-            const secretUrls = Object.values(configData.secretFrames || {});
-            const filtered = data.filter(url => !secretUrls.includes(url));
-            setExternalFrames(filtered);
-          });
+        // 2. 코드가 있고 매핑된 프레임이 있다면 즉시 선택
+        if (code && secretMap[code]) {
+          setSelectedFrame(secretMap[code]);
         }
-      })
-      .catch(() => console.warn("외부 프레임 로드 실패"));
+
+        // 3. 프레임 목록을 가져오고 비밀 프레임은 즉시 필터링
+        const framesRes = await fetch(`${apiUrl}/api/frames-list`);
+        const allFrames = await framesRes.json();
+        
+        if (Array.isArray(allFrames)) {
+          const secretUrls = Object.values(secretMap);
+          const filtered = allFrames.filter(url => !secretUrls.includes(url));
+          setExternalFrames(filtered);
+        }
+      } catch (err) {
+        console.warn("데이터 로드 중 오류 발생:", err);
+      }
+    }
+
+    loadInitialData();
   }, []);
 
   if (step === "HOME") {
@@ -140,7 +139,6 @@ export default function Home() {
                       `}
                       onClick={() => {
                         if (isSelected) {
-                          // 이미 선택된 사진이면 우측 선택 배열에서 뺀다 (Toggle 해제 로직)
                           const slotIndex = selectedSlots.indexOf(shot);
                           if (slotIndex > -1) {
                             const newSlots = [...selectedSlots];
@@ -148,7 +146,6 @@ export default function Home() {
                             setSelectedSlots(newSlots);
                           }
                         } else {
-                          // 빈 슬롯에 사진 추가
                           const firstEmptyIndex = selectedSlots.findIndex(slot => slot === null);
                           if (firstEmptyIndex !== -1) {
                             const newSlots = [...selectedSlots];
@@ -170,7 +167,7 @@ export default function Home() {
               })}
             </div>
           </>
-        ) : (
+        ) : step === "FRAME_SELECTION" ? (
           <div className="flex flex-col h-full py-6 px-2 lg:text-left text-center relative">
             <button 
               onClick={() => setStep("SELECTION")} 
@@ -216,6 +213,12 @@ export default function Home() {
                 </>
               )}
             </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+             <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-6"></div>
+             <h2 className="text-3xl font-black text-black mb-3">멋진 사진을 굽는 중입니다... 🔥</h2>
+             <p className="text-zinc-500 font-medium">잠시만 기다려 주시면 고화질 네컷사진이 완성됩니다!</p>
           </div>
         )}
       </section>
