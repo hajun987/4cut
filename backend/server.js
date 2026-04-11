@@ -10,7 +10,8 @@ ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const BASE_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
+// 환경 변수가 없으면 요청마다 동적으로 감지합니다.
+const BASE_URL = process.env.BACKEND_URL;
 
 // CORS 설정: 배포 환경에서는 보안을 위해 실제 프론트엔드 주소만 허용하도록 설정 가능
 app.use(cors({
@@ -28,12 +29,12 @@ let config = {
 };
 
 // 디렉토리 세팅
-const setupDirs = () => {
-  if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
-  if (!fs.existsSync("uploads/results")) fs.mkdirSync("uploads/results");
-  if (!fs.existsSync("uploads/frames")) fs.mkdirSync("uploads/frames");
-};
-setupDirs();
+const resultDir = path.join(__dirname, "uploads/results");
+const externalFrameDir = path.join(__dirname, "external-frames");
+
+if (!fs.existsSync(resultDir)) fs.mkdirSync(resultDir, { recursive: true });
+if (!fs.existsSync(externalFrameDir)) fs.mkdirSync(externalFrameDir, { recursive: true });
+if (!fs.existsSync("uploads/frames")) fs.mkdirSync("uploads/frames", { recursive: true });
 
 const resultStorage = multer.diskStorage({
   destination: "uploads/results/",
@@ -60,7 +61,10 @@ app.post("/api/config", (req, res) => {
 app.post("/api/save-result", uploadResult.single("image"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   
-  const fileUrl = `${BASE_URL}/uploads/results/${req.file.filename}`;
+  const host = req.get('host');
+  const protocol = req.protocol === 'http' && host.includes('render.com') ? 'https' : req.protocol;
+  const currentBase = BASE_URL || `${protocol}://${host}`;
+  const fileUrl = `${currentBase}/uploads/results/${req.file.filename}`;
   res.json({ url: fileUrl, filename: req.file.filename });
 });
 
@@ -89,9 +93,6 @@ const videoStorage = multer.diskStorage({
   filename: (req, file, cb) => cb(null, `vid_${Date.now()}_${Math.random().toString(36).substring(7)}.webm`)
 });
 const uploadVideo = multer({ storage: videoStorage, limits: { fileSize: 100 * 1024 * 1024 } });
-
-// 외부 폴더 경로 정의 (비디오 엔진 내부에서도 쓰임)
-const externalFrameDir = path.join(__dirname, "../frame");
 
 // 라이브 멀티그리드 비디오 생성 API
 app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
@@ -177,16 +178,16 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
   }
 });
 
-// 외부 폴더 (../frame) 정적 서빙 및 목록 조회
-if (!fs.existsSync(externalFrameDir)) {
-  fs.mkdirSync(externalFrameDir);
-}
+// 외부 폴더 (external-frames) 정적 서빙 및 목록 조회
 app.use("/external-frames", express.static(externalFrameDir));
 
 app.get("/api/frames-list", (req, res) => {
   if (!fs.existsSync(externalFrameDir)) return res.json([]);
   const files = fs.readdirSync(externalFrameDir).filter(f => f.toLowerCase().endsWith(".png") || f.toLowerCase().endsWith(".jpg"));
-  const urls = files.map(f => `${BASE_URL}/external-frames/${encodeURIComponent(f)}`);
+  const host = req.get('host');
+  const protocol = req.protocol === 'http' && host.includes('render.com') ? 'https' : req.protocol;
+  const currentBase = BASE_URL || `${protocol}://${host}`;
+  const urls = files.map(f => `${currentBase}/external-frames/${encodeURIComponent(f)}`);
   res.json(urls);
 });
 
@@ -198,7 +199,10 @@ const uploadFrameExternal = multer({ storage: frameStorageExternal });
 
 app.post("/api/frame-external", uploadFrameExternal.single("frame"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  res.json({ url: `${BASE_URL}/external-frames/${encodeURIComponent(req.file.filename)}` });
+  const host = req.get('host');
+  const protocol = req.protocol === 'http' && host.includes('render.com') ? 'https' : req.protocol;
+  const currentBase = BASE_URL || `${protocol}://${host}`;
+  res.json({ url: `${currentBase}/external-frames/${encodeURIComponent(req.file.filename)}` });
 });
 
 app.delete("/api/frame-external/:name", (req, res) => {
@@ -219,7 +223,9 @@ app.post("/api/frame", uploadFrame.single("frame"), (req, res) => {
   // 프론트엔드가 Next.js 이며 같은 머신에 있으므로,
   // public 폴더로 덮어쓰기 복사하여 CanvasRenderer가 쉽게 접근할 수 있도록 동기화
   const frontendPublicPath = path.join(__dirname, "../frontend/public/default-frame.png");
-  fs.copyFileSync(req.file.path, frontendPublicPath);
+  if (fs.existsSync(path.dirname(frontendPublicPath))) {
+    fs.copyFileSync(req.file.path, frontendPublicPath);
+  }
 
   res.json({ url: config.frameUrl });
 });
