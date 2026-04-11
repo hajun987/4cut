@@ -26,7 +26,7 @@ export default function Home() {
       .then(data => {
         if(Array.isArray(data)) setExternalFrames(data);
       })
-      .catch(e => console.warn("외부 프레임 로드 실패", e));
+      .catch(() => console.warn("외부 프레임 로드 실패"));
   }, []);
 
   if (step === "HOME") {
