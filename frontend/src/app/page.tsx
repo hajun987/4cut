@@ -19,12 +19,43 @@ export default function Home() {
   const [finalImageId, setFinalImageId] = useState<string | null>(null);
   const [finalVideoId, setFinalVideoId] = useState<string | null>(null);
   const [externalFrames, setExternalFrames] = useState<string[]>([]);
+  const [secretCode, setSecretCode] = useState<string | null>(null);
+  const [secretFrameMap, setSecretFrameMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/frames-list`)
+    // 1. URL에서 비밀 코드 감지
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (code) setSecretCode(code);
+
+    // 2. 전체 설정 및 프레임 목록 로드
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    
+    // 비밀 프레임 매핑 정보 가져오기
+    fetch(`${apiUrl}/api/config`)
       .then(res => res.json())
       .then(data => {
-        if(Array.isArray(data)) setExternalFrames(data);
+        if (data.secretFrames) {
+          setSecretFrameMap(data.secretFrames);
+          // 코드가 있고 매핑된 프레임이 있다면 즉시 선택
+          if (code && data.secretFrames[code]) {
+            setSelectedFrame(data.secretFrames[code]);
+          }
+        }
+      });
+
+    fetch(`${apiUrl}/api/frames-list`)
+      .then(res => res.json())
+      .then(data => {
+        if(Array.isArray(data)) {
+          // 비밀 코드가 부여된 프레임들은 일반 목록에서 숨김 처리
+          // (비밀 프레임 데이터 구조에서 값들(URLs)만 추출하여 필터링)
+          fetch(`${apiUrl}/api/config`).then(r => r.json()).then(configData => {
+            const secretUrls = Object.values(configData.secretFrames || {});
+            const filtered = data.filter(url => !secretUrls.includes(url));
+            setExternalFrames(filtered);
+          });
+        }
       })
       .catch(() => console.warn("외부 프레임 로드 실패"));
   }, []);
@@ -211,13 +242,20 @@ export default function Home() {
 
         <div className="w-full flex items-center justify-center">
           {step === "SELECTION" ? (
-             <button
-              onClick={() => setStep("FRAME_SELECTION")}
-              disabled={selectedSlots.includes(null)}
-              className="px-10 py-5 bg-black text-white text-2xl w-full max-w-md font-bold rounded-full shadow-[0_10px_20px_rgba(0,0,0,0.15)] transition-all hover:bg-zinc-800 hover:-translate-y-1 active:scale-95 disabled:opacity-30 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
-             >
-               프레임 고르러 가기 ➜
-             </button>
+              <button 
+                onClick={() => {
+                  if (secretCode && secretFrameMap[secretCode]) {
+                    // 비밀 코드가 있으면 프레임 선택 단계를 건너뛰고 바로 결과 단계로 진입
+                    setStep("RESULT");
+                  } else {
+                    setStep("FRAME_SELECTION");
+                  }
+                }}
+                disabled={selectedSlots.filter(s => s !== null).length < 4}
+                className="w-full py-5 bg-primary text-white text-2xl font-black rounded-2xl shadow-xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:hover:scale-100"
+              >
+                {secretCode && secretFrameMap[secretCode] ? "사진 완성하기 ✨" : "프레임 고르러 가기 🎨"}
+              </button>
           ) : (
              <CanvasRenderer 
                 selectedSlots={selectedSlots as string[]} 

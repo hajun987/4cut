@@ -192,6 +192,7 @@ let config = {
   intervalSeconds: 6,
   maxShots: 6,
   readySeconds: 10,
+  secretFrames: {},
   frameUrl: null
 };
 

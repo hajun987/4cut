@@ -10,6 +10,7 @@ export default function AdminPage() {
   const [intervalSeconds, setIntervalSeconds] = useState(6);
   const [maxShots, setMaxShots] = useState(6);
   const [readySeconds, setReadySeconds] = useState(10);
+  const [secretFrames, setSecretFrames] = useState<Record<string, string>>({}); // { "코드": "프레임URL" }
   const [isSaving, setIsSaving] = useState(false);
   
   const [frames, setFrames] = useState<string[]>([]);
@@ -34,6 +35,7 @@ export default function AdminPage() {
         setIntervalSeconds(data.intervalSeconds || 6);
         setMaxShots(data.maxShots || 6);
         setReadySeconds(data.readySeconds || 10);
+        setSecretFrames(data.secretFrames || {});
       }
     } catch {
       console.warn("Backend config fetch failed");
@@ -58,7 +60,7 @@ export default function AdminPage() {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intervalSeconds, maxShots, readySeconds })
+        body: JSON.stringify({ intervalSeconds, maxShots, readySeconds, secretFrames })
       });
       alert("설정이 저장되었습니다.");
     } catch {
@@ -101,6 +103,41 @@ export default function AdminPage() {
       fetchFrames();
     } catch {
       alert("삭제 중 오류가 발생했습니다.");
+    }
+  };
+
+  // 비밀 코드 할당 함수
+  const handleAssignSecretCode = (frameUrl: string) => {
+    const code = prompt("이 프레임에 부여할 고유 코드를 입력하세요 (예: event_vip):");
+    if (!code) return;
+    
+    // 이미 존재하는 코드인지 확인
+    if (secretFrames[code]) {
+      if (!confirm("이미 존재하는 코드입니다. 프레임을 교체하시겠습니까?")) return;
+    }
+
+    const newSecretFrames = { ...secretFrames, [code]: frameUrl };
+    setSecretFrames(newSecretFrames);
+    updateSecretFramesOnServer(newSecretFrames);
+  };
+
+  const handleRemoveSecretCode = (code: string) => {
+    if (!confirm(`'${code}' 코드를 삭제하시겠습니까?`)) return;
+    const newSecretFrames = { ...secretFrames };
+    delete newSecretFrames[code];
+    setSecretFrames(newSecretFrames);
+    updateSecretFramesOnServer(newSecretFrames);
+  };
+
+  const updateSecretFramesOnServer = async (newSecretFrames: Record<string, string>) => {
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intervalSeconds, maxShots, readySeconds, secretFrames: newSecretFrames })
+      });
+    } catch (e) {
+      console.error("비밀 코드 서버 저장 실패", e);
     }
   };
 
@@ -219,13 +256,18 @@ export default function AdminPage() {
                 {frames.map((url, idx) => (
                   <div key={idx} className="relative group rounded-xl overflow-hidden border border-zinc-200 bg-zinc-100 aspect-[1080/1920]">
                     <img src={url} alt="frame thumbnail" className="w-full h-full object-contain" />
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 backdrop-blur-sm">
+                       <button 
+                         onClick={() => handleAssignSecretCode(url)}
+                         className="w-3/4 py-2 bg-primary text-white font-bold rounded-lg shadow-lg hover:scale-105 transition-all text-sm flex items-center justify-center gap-2"
+                       >
+                         🔑 코드 부여
+                       </button>
                        <button 
                          onClick={() => handleDeleteFrame(url)}
-                         className="px-4 py-2 bg-red-500 text-white font-bold rounded-lg shadow-lg hover:bg-red-600 hover:scale-105 transition-all text-sm flex items-center gap-2"
+                         className="w-3/4 py-2 bg-red-500 text-white font-bold rounded-lg shadow-lg hover:bg-red-600 hover:scale-105 transition-all text-sm flex items-center justify-center gap-2"
                        >
-                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"/></svg>
-                         삭제
+                         🗑️ 삭제
                        </button>
                     </div>
                   </div>
@@ -240,6 +282,71 @@ export default function AdminPage() {
           </section>
 
         </div>
+
+        {/* 비밀 고유 코드 관리 섹션 */}
+        <section className="mt-10 bg-white p-8 rounded-3xl shadow-sm border border-zinc-200">
+          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">🤫 비밀 프레임 (고유 코드) 목록</h2>
+          <div className="text-sm text-zinc-500 mb-6 bg-zinc-50 p-4 rounded-xl font-medium border border-zinc-100">
+            * 코드가 부여된 프레임은 전용 링크(`?code=코드명`)로 들어온 고객에게만 보이며, 일반 고객에게는 숨겨집니다.
+          </div>
+          
+          {Object.keys(secretFrames).length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-zinc-100">
+                    <th className="py-4 font-bold text-zinc-600">고유 코드</th>
+                    <th className="py-4 font-bold text-zinc-600">연결된 프레임 미리보기</th>
+                    <th className="py-4 font-bold text-zinc-600">링크 복사</th>
+                    <th className="py-4 font-bold text-zinc-600">관리</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(secretFrames).map(([code, url]) => (
+                    <tr key={code} className="border-b border-zinc-50 hover:bg-zinc-50/50 transition-colors">
+                      <td className="py-4">
+                        <span className="px-3 py-1 bg-primary/10 text-primary font-black rounded-lg">
+                          {code}
+                        </span>
+                      </td>
+                      <td className="py-4 font-medium">
+                         <div className="flex items-center gap-3">
+                           <img src={url} alt="secret frame" className="h-16 w-auto rounded border border-zinc-200" />
+                           <span className="text-xs text-zinc-400 truncate max-w-[150px]">{url.split('/').pop()}</span>
+                         </div>
+                      </td>
+                      <td className="py-4">
+                        <button 
+                          onClick={() => {
+                            const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+                            const link = `${baseUrl}/?code=${code}`;
+                            navigator.clipboard.writeText(link);
+                            alert("링크가 복사되었습니다!");
+                          }}
+                          className="text-xs font-bold text-zinc-400 hover:text-primary underline flex items-center gap-1"
+                        >
+                          🔗 전용 링크 복사
+                        </button>
+                      </td>
+                      <td className="py-4">
+                        <button 
+                          onClick={() => handleRemoveSecretCode(code)}
+                          className="text-red-400 hover:text-red-500 font-bold text-sm"
+                        >
+                          연결 해제
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="py-10 text-center text-zinc-400 font-medium">
+              아직 특별한 코드가 부여된 프레임이 없습니다.
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
