@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-primary: #FF4785;
+  --color-primary-hover: #ff216c;
+}
+
+:root {
+  --background: #f8f9fa;
+  --foreground: #111111;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+  touch-action: pan-x pan-y;
+  min-height: 100dvh;
+  width: 100%;
+  overflow-y: auto;
+}
+
+/* 기본은 스크롤 허용, 키오스크 전용 페이지에서만 개별 제어 */
+html, body {
+  width: 100vw;
+  min-height: 100dvh;
+}
+
+/* 스크롤바 표시 (사용자가 스크롤 가능함을 인지하도록 함) */
+::-webkit-scrollbar {
+  display: block;
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
+
+* {
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
+@keyframes flash {
+  0% { opacity: 1; background-color: white; }
+  100% { opacity: 0; background-color: transparent; }
+}
+.animate-flash {
+  animation: flash 0.15s ease-out forwards;
+}

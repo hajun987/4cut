@@ -7,48 +7,9 @@ const cron = require("node-cron");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegInstaller = require("@ffmpeg-installer/ffmpeg");
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
-const { Upload } = require("@aws-sdk/lib-storage");
-const mime = require("mime-types");
 
 const app = express();
 app.set('trust proxy', true);
-
-// Cloudflare R2 설정
-const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || "3951114ac8cb013f4bd1759894bb2952";
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "53030f7c5ab8bccccad67b7a81a017e3";
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || "6dee324261a5346e7197f37fd44564768b347cf4f661831ccffb76a629cf29f3";
-const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || "4cut-photos";
-const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || "https://pub-1bb31f7734c744dcbe3d3a0e03d4a6a2.r2.dev";
-
-const s3Client = new S3Client({
-  region: "auto",
-  endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: R2_ACCESS_KEY_ID,
-    secretAccessKey: R2_SECRET_ACCESS_KEY,
-  },
-});
-
-// 파일 업로드 헬퍼 함수
-async function uploadFileToR2(filePath, fileName) {
-  const fileStream = fs.createReadStream(filePath);
-  const contentType = mime.lookup(filePath) || "application/octet-stream";
-
-  const upload = new Upload({
-    client: s3Client,
-    params: {
-      Bucket: R2_BUCKET_NAME,
-      Key: fileName,
-      Body: fileStream,
-      ContentType: contentType,
-    },
-  });
-
-  await upload.done();
-  return `${R2_PUBLIC_URL}/${fileName}`;
-}
-
 const PORT = process.env.PORT || 4000;
 const BASE_URL = process.env.BACKEND_URL;
 
@@ -105,19 +66,12 @@ app.post("/api/config", (req, res) => {
 });
 
 // 결과 사진 저장 (QR 제공 목적)
-app.post("/api/save-result", uploadResult.single("image"), async (req, res) => {
+app.post("/api/save-result", uploadResult.single("image"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   
-  try {
-    const r2Url = await uploadFileToR2(req.file.path, req.file.filename);
-    res.json({ url: r2Url, filename: req.file.filename });
-  } catch (err) {
-    console.error("[R2 Upload Error]", err);
-    // 폴백: R2 업로드 실패 시 기존 방식(로컬 주소)으로 응답 시도
-    const currentBase = getCurrentBaseUrl(req);
-    const fileUrl = `${currentBase}/uploads/results/${req.file.filename}`;
-    res.json({ url: fileUrl, filename: req.file.filename });
-  }
+  const currentBase = getCurrentBaseUrl(req);
+  const fileUrl = `${currentBase}/uploads/results/${req.file.filename}`;
+  res.json({ url: fileUrl, filename: req.file.filename });
 });
 
 // 강제 다운로드 엔드포인트 (Content-Disposition 헤더로 파일명 강제 지정)
@@ -187,18 +141,10 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
       .outputOptions(['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-t', '4', '-shortest'])
       .save(outPath)
       .on('start', (cmd) => console.log('[FFmpeg] cmd:', cmd))
-      .on('end', async () => { 
+      .on('end', () => { 
         console.log('[FFmpeg] Done:', outFilename); 
-        try {
-          const r2Url = await uploadFileToR2(outPath, outFilename);
-          if (!res.headersSent) {
-            res.json({ url: r2Url }); 
-          }
-        } catch (uploadErr) {
-          console.error("[R2 Video Upload Error]", uploadErr);
-          if (!res.headersSent) {
-            res.json({ url: `${getCurrentBaseUrl(req)}/uploads/results/${outFilename}` }); 
-          }
+        if (!res.headersSent) {
+          res.json({ url: `${getCurrentBaseUrl(req)}/uploads/results/${outFilename}` }); 
         }
       })
       .on('error', (err) => { 
@@ -246,18 +192,10 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
       .outputOptions(['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-t', '4', '-shortest'])
       .save(outPath)
       .on('start', (cmd) => console.log('[FFmpeg] cmd:', cmd))
-      .on('end', async () => { 
+      .on('end', () => { 
         console.log('[FFmpeg] Done:', outFilename); 
-        try {
-          const r2Url = await uploadFileToR2(outPath, outFilename);
-          if (!res.headersSent) {
-            res.json({ url: r2Url }); 
-          }
-        } catch (uploadErr) {
-          console.error("[R2 Video Upload Error]", uploadErr);
-          if (!res.headersSent) {
-            res.json({ url: `${getCurrentBaseUrl(req)}/uploads/results/${outFilename}` }); 
-          }
+        if (!res.headersSent) {
+          res.json({ url: `${getCurrentBaseUrl(req)}/uploads/results/${outFilename}` }); 
         }
       })
       .on('error', (err) => { 
@@ -272,32 +210,12 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
 // 외부 폴더 (external-frames) 정적 서빙 및 목록 조회
 app.use("/external-frames", express.static(externalFrameDir));
 
-const { ListObjectsV2Command } = require("@aws-sdk/client-s3");
-
-app.get("/api/frames-list", async (req, res) => {
-  try {
-    // Cloudflare R2에서 파일 목록 직접 조회
-    const command = new ListObjectsV2Command({
-      Bucket: R2_BUCKET_NAME
-    });
-    
-    const { Contents } = await s3Client.send(command);
-    if (!Contents) return res.json([]);
-    
-    // png, jpg 확장자를 가진 파일만 필터링하여 전체 URL 생성
-    const urls = Contents
-      .filter(obj => obj.Key.toLowerCase().endsWith(".png") || obj.Key.toLowerCase().endsWith(".jpg"))
-      .map(obj => `${R2_PUBLIC_URL}/${encodeURIComponent(obj.Key)}`);
-      
-    res.json(urls);
-  } catch (err) {
-    console.error("[R2 List Error]", err);
-    // 폴백: R2 조회 실패 시 로컬 파일 시스템에서 조회
-    if (!fs.existsSync(externalFrameDir)) return res.json([]);
-    const files = fs.readdirSync(externalFrameDir).filter(f => f.toLowerCase().endsWith(".png") || f.toLowerCase().endsWith(".jpg"));
-    const urls = files.map(f => `${R2_PUBLIC_URL}/${encodeURIComponent(f)}`);
-    res.json(urls);
-  }
+app.get("/api/frames-list", (req, res) => {
+  if (!fs.existsSync(externalFrameDir)) return res.json([]);
+  const files = fs.readdirSync(externalFrameDir).filter(f => f.toLowerCase().endsWith(".png") || f.toLowerCase().endsWith(".jpg"));
+  const currentBase = getCurrentBaseUrl(req);
+  const urls = files.map(f => `${currentBase}/external-frames/${encodeURIComponent(f)}`);
+  res.json(urls);
 });
 
 const frameStorageExternal = multer.diskStorage({
@@ -310,16 +228,9 @@ const frameStorageExternal = multer.diskStorage({
 });
 const uploadFrameExternal = multer({ storage: frameStorageExternal });
 
-app.post("/api/frame-external", uploadFrameExternal.single("frame"), async (req, res) => {
+app.post("/api/frame-external", uploadFrameExternal.single("frame"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  
-  try {
-    const r2Url = await uploadFileToR2(req.file.path, req.file.filename);
-    res.json({ url: r2Url });
-  } catch (err) {
-    console.error("[R2 Frame Upload Error]", err);
-    res.json({ url: `${getCurrentBaseUrl(req)}/external-frames/${encodeURIComponent(req.file.filename)}` });
-  }
+  res.json({ url: `${getCurrentBaseUrl(req)}/external-frames/${encodeURIComponent(req.file.filename)}` });
 });
 
 app.delete("/api/frame-external/:name", (req, res) => {
