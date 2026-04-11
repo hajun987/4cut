@@ -120,6 +120,66 @@ function downloadFrameTemp(url, destPath) {
   });
 }
 
+// [R2 전용] 24시간이 지난 결과물 파일을 자동 삭제하는 헬퍼 함수
+async function cleanupR2Results() {
+  try {
+    const listCommand = new ListObjectsV2Command({
+      Bucket: R2_BUCKET_NAME,
+      Prefix: "results/"
+    });
+    const { Contents } = await s3Client.send(listCommand);
+    if (!Contents || Contents.length === 0) return;
+
+    const now = new Date();
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    
+    // LastModified가 24시간을 넘긴 오브젝트만 필터링
+    const toDelete = Contents
+      .filter(obj => obj.Key !== "results/" && (now - new Date(obj.LastModified)) > ONE_DAY_MS)
+      .map(obj => ({ Key: obj.Key }));
+
+    if (toDelete.length > 0) {
+      console.log(`[Cron R2] 24시간 경과된 오브젝트 ${toDelete.length}개를 삭제합니다.`);
+      const deleteCommand = new DeleteObjectsCommand({
+        Bucket: R2_BUCKET_NAME,
+        Delete: { Objects: toDelete }
+      });
+      await s3Client.send(deleteCommand);
+    }
+  } catch (err) {
+    console.error("[Cron R2 Error]", err);
+  }
+}
+
+// [작업 대기열] 저사양 서버 메모리 보호를 위해 작업을 하나씩 순서대로 처리
+class JobQueue {
+  constructor() {
+    this.queue = [];
+    this.isProcessing = false;
+  }
+  async add(task) {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ task, resolve, reject });
+      this.processNext();
+    });
+  }
+  async processNext() {
+    if (this.isProcessing || this.queue.length === 0) return;
+    this.isProcessing = true;
+    const { task, resolve, reject } = this.queue.shift();
+    try {
+      const result = await task();
+      resolve(result);
+    } catch (err) {
+      reject(err);
+    } finally {
+      this.isProcessing = false;
+      this.processNext();
+    }
+  }
+}
+const videoQueue = new JobQueue();
+
 // CORS 설정: 배포 환경에서는 보안을 위해 실제 프론트엔드 주소만 허용하도록 설정 가능
 app.use(cors({
   origin: "*", // 테스트 단계에서는 모두 허용, 추후 FRONTEND_URL로 제한 가능
@@ -277,12 +337,14 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), async (req, res) => 
     console.error("[Video] Expected 4 files, got:", req.files ? req.files.length : 0);
     return res.status(400).json({ error: "4 videos required, got: " + (req.files ? req.files.length : 0) });
   }
-  
-  const frameStr = req.body.frame; 
-  const timestamp = Date.now();
-  const outFilename = `result_vid_${timestamp}.mp4`;
-  const outPath = path.join(__dirname, "uploads/results", outFilename);
-  const tempDir = path.join(__dirname, "uploads/temp");
+
+  // 무거운 합성 작업은 대기열(Queue)에 넣어 하나씩 처리합니다.
+  return videoQueue.add(async () => {
+    const frameStr = req.body.frame; 
+    const timestamp = Date.now();
+    const outFilename = `result_vid_${timestamp}.mp4`;
+    const outPath = path.join(__dirname, "uploads/results", outFilename);
+    const tempDir = path.join(__dirname, "uploads/temp");
 
   let command = ffmpeg();
   req.files.forEach(f => command.input(f.path));
@@ -424,13 +486,13 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), async (req, res) => 
           res.status(500).json({error: 'encoding failed: ' + err.message}); 
         }
       });
-  }
+  });
 });
 
 // 외부 폴더 (external-frames) 정적 서빙 및 목록 조회
 app.use("/external-frames", express.static(externalFrameDir));
 
-const { ListObjectsV2Command } = require("@aws-sdk/client-s3");
+const { ListObjectsV2Command, DeleteObjectCommand, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
 
 app.get("/api/frames-list", async (req, res) => {
   try {
@@ -513,8 +575,13 @@ app.delete("/api/frame", (req, res) => {
 });
 
 // 정기 삭제 스케줄러 (매시간 정각마다 실행)
-cron.schedule("0 * * * *", () => {
-  console.log("[Cron] 24시간 이상 지난 결과 사진을 스캔하여 삭제합니다.");
+cron.schedule("0 * * * *", async () => {
+  console.log("[Cron] 24시간 이상 지난 로컬 및 R2 결과물을 청소합니다.");
+  
+  // 1. R2 클라우드 청소
+  await cleanupR2Results();
+
+  // 2. 로컬 파일 청소
   const resultsDir = path.join(__dirname, "uploads/results");
   if (!fs.existsSync(resultsDir)) return;
   
@@ -525,14 +592,17 @@ cron.schedule("0 * * * *", () => {
   let deletedCount = 0;
   files.forEach((file) => {
     const filePath = path.join(resultsDir, file);
-    const stats = fs.statSync(filePath);
-    
-    if (now - stats.mtimeMs > ONE_DAY_MS) {
-      fs.unlinkSync(filePath);
-      deletedCount++;
+    try {
+      const stats = fs.statSync(filePath);
+      if (now - stats.mtimeMs > ONE_DAY_MS) {
+        fs.unlinkSync(filePath);
+        deletedCount++;
+      }
+    } catch (e) {
+      // 파일이 이미 삭제된 경우 등 예외 처리
     }
   });
-  console.log(`[Cron] 처리 완료. 삭제된 파일 수: ${deletedCount}`);
+  console.log(`[Cron] 로컬 파일 처리 완료. 삭제된 파일 수: ${deletedCount}`);
 });
 
 app.listen(PORT, async () => {

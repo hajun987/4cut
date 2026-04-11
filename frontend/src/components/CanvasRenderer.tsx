@@ -27,9 +27,9 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
     });
   };
 
-  const handleComplete = async () => {
+  const handleComplete = async (mode: 'photo' | 'video' = 'video') => {
     setIsProcessing(true);
-    setLoadingText("서버에서 사진을 합성 중입니다...");
+    setLoadingText(mode === 'photo' ? "사진 전용 결과물을 저장 중입니다..." : "서버에서 사진과 영상을 합성 중입니다...");
 
     try {
       // useRef로 인해 HTML에 canvas가 없으면 실행 자체가 안 되고 튕기던 현상 해결
@@ -120,11 +120,12 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
         alert("통신 오류가 발생했습니다.");
       }
 
-      setLoadingText("4분할 액자 동영상을 렌더링 중입니다 (최대 10초 소요)...");
       let uploadedVideoUrl = "";
       let uploadedVideoId = "";
       
-      try {
+      if (mode === 'video') {
+        setLoadingText("4분할 액자 동영상을 렌더링 중입니다 (최대 10초 소요)...");
+        try {
          const videoFormData = new FormData();
          videoFormData.append("frame", selectedFrame);
          
@@ -163,6 +164,8 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
           console.error("비디오 렌더링 실패:", e);
         }
  
+        }
+      }
        setLoadingText("완료되었습니다!");
  
        // 자동 다운로드 - 아이폰에서도 재생이 아닌 '파일 저장'이 되도록 서버 API를 사용합니다.
@@ -184,7 +187,7 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
          if (finalImageId) {
            triggerDownload(finalImageId);
          }
-         if (uploadedVideoId) {
+          if (mode === "video" && uploadedVideoId) {
            setTimeout(() => {
              triggerDownload(uploadedVideoId);
            }, 1500);
@@ -217,13 +220,23 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
         </div>
       )}
 
-      <button
-        onClick={handleComplete}
-        disabled={isProcessing}
-        className={`px-10 py-5 text-2xl w-full max-w-md font-black rounded-full shadow-lg transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed ${isProcessing ? 'bg-zinc-200 text-zinc-500' : 'bg-primary text-white hover:bg-primary-hover shadow-primary/40'}`}
-      >
-        {isProcessing ? "최종본 저장 중..." : "합성완료 및 출력하기"}
-      </button>
+      <div className="flex flex-col gap-4 w-full max-w-md px-6">
+        <button
+          onClick={() => handleComplete('photo')}
+          disabled={isProcessing}
+          className="px-8 py-5 text-xl font-black rounded-2xl bg-white text-black border-2 border-zinc-200 shadow-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+        >
+          {isProcessing ? "처리 중..." : "📸 사진만 받기 (초고속)"}
+        </button>
+
+        <button
+          onClick={() => handleComplete('video')}
+          disabled={isProcessing}
+          className="px-8 py-6 text-2xl font-black rounded-2xl bg-primary text-white shadow-2xl shadow-primary/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+        >
+          {isProcessing ? "작업 중..." : "🎞️ 사진 + 영상 모두 받기"}
+        </button>
+      </div>
     </>
   );
 }
