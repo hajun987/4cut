@@ -486,6 +486,7 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), async (req, res) => 
           res.status(500).json({error: 'encoding failed: ' + err.message}); 
         }
       });
+    }
   });
 });
 
