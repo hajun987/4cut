@@ -131,11 +131,14 @@ export default function AdminPage() {
 
   const updateSecretFramesOnServer = async (newSecretFrames: Record<string, string>) => {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/config`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ intervalSeconds, maxShots, readySeconds, secretFrames: newSecretFrames })
       });
+      if (res.ok) {
+        console.log("[Admin] 서버 저장 성공!");
+      }
     } catch (e) {
       console.error("비밀 코드 서버 저장 실패", e);
     }

@@ -38,20 +38,23 @@ export default function Home() {
         const secretMap = configData.secretFrames || {};
         setSecretFrameMap(secretMap);
 
+        // 파일명으로 매칭하는 헬퍼 함수
+        const getFilename = (url: string) => url.split('/').pop() || "";
+
         if (code && secretMap[code]) {
-          console.log("[Debug] 비밀 코드 감지 및 프레임 매칭 성공:", code, "=>", secretMap[code]);
+          console.log("[Debug] 비밀 코드 감지:", code);
           setSelectedFrame(secretMap[code].trim());
-        } else if (code) {
-          console.warn("[Debug] 코드는 있으나 매핑된 프레임이 없음:", code);
         }
 
         const framesRes = await fetch(`${apiUrl}/api/frames-list`);
         const allFrames = await framesRes.json();
         
         if (Array.isArray(allFrames)) {
-          console.log("[Debug] 전체 프레임 목록:", allFrames);
-          const secretUrls = Object.values(secretMap).map((url: any) => url.trim());
-          const filtered = allFrames.filter(url => !secretUrls.includes(url.trim()));
+          // 파일명 리스트로 만들어서 더 강력하게 필터링 (도메인이 달라도 파일명이 같으면 필터링)
+          const secretFilenames = Object.values(secretMap).map((url: any) => getFilename(url.trim()));
+          console.log("[Debug] 비밀 프레임 파일명들:", secretFilenames);
+
+          const filtered = allFrames.filter(url => !secretFilenames.includes(getFilename(url.trim())));
           console.log("[Debug] 필터링된 프레임 목록:", filtered);
           setExternalFrames(filtered);
         }
