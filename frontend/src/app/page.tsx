@@ -77,7 +77,7 @@ export default function Home() {
     const qrTargetUrl = finalVideoId 
        ? `${baseUrl}/share/${finalImageId}?vid=${finalVideoId}` 
        : `${baseUrl}/share/${finalImageId}`;
-    return <ResultQR url={qrTargetUrl} imagePreview={finalQrUrl} />;
+    return <ResultQR url={qrTargetUrl} imagePreview={finalQrUrl} imageId={finalImageId} videoId={finalVideoId || undefined} />;
   }
 
   const pastelColors = [

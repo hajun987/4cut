@@ -606,8 +606,6 @@ cron.schedule("0 * * * *", async () => {
   console.log(`[Cron] 로컬 파일 처리 완료. 삭제된 파일 수: ${deletedCount}`);
 });
 
-const PORT = process.env.PORT || 4000;
-
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Backend server listening at http://0.0.0.0:${PORT}`);
   await loadConfigFromR2(); // 서버 시작 시 R2에서 설정 불러오기

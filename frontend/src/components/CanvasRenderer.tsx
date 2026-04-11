@@ -182,6 +182,7 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
          document.body.removeChild(a);
        };
  
+       /* 수동 다운로드로 변경을 위해 자동 다운로드 주석 처리
        try {
          if (finalImageId) {
            triggerDownload(finalImageId);
@@ -192,6 +193,7 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
            }, 1500);
          }
        } catch { console.warn("자동 다운로드 처리 중 오류 발생"); }
+       */
 
       setTimeout(() => {
         onUploaded(finalImageUrl, finalImageId, uploadedVideoId);
