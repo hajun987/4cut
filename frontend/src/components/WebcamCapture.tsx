@@ -146,7 +146,7 @@ export default function WebcamCapture({ onCapture, isCapturing, setIsCapturing, 
     let currentCount = 0;
 
     for (let i = 0; i < maxShots; i++) {
-      if (isExecutionLocked.current === false) break;
+      if (!isExecutionLocked.current) break;
 
       const chunks: Blob[] = [];
       let mediaRecorder: MediaRecorder | null = null;
