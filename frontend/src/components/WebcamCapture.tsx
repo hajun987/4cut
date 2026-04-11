@@ -23,7 +23,7 @@ export default function WebcamCapture({ onCapture, isCapturing, setIsCapturing, 
   const [shotCount, setShotCount] = useState(0);
 
   const [setupCountdown, setSetupCountdown] = useState<number | null>(null);
-  const startLoopRef = useRef<() => void>();
+  const startLoopRef = useRef<(() => void) | null>(null);
   const isExecutionLocked = useRef(false);
 
   useEffect(() => {
