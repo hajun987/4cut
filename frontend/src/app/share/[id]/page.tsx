@@ -32,8 +32,9 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
   }, [id]);
 
   const handleManualDownload = async (serverFile: string, saveName: string) => {
-    // R2 주소로 직접 연결하여 다운로드 유도
-    const downloadUrl = `${r2BaseUrl}/results/${serverFile}`;
+    // 아이폰에서도 '파일로 저장'이 가능하도록 서버의 다운로드 API를 경유합니다.
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const downloadUrl = `${apiUrl}/api/download/${serverFile}?name=${encodeURIComponent(saveName)}`;
     window.open(downloadUrl, "_blank");
   };
 

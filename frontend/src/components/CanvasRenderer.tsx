@@ -165,16 +165,15 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
  
        setLoadingText("완료되었습니다!");
  
-       // 자동 다운로드 - Cloudflare R2에서 직접 다운로드하도록 최적화 (502 에러 방지)
+       // 자동 다운로드 - 아이폰에서도 재생이 아닌 '파일 저장'이 되도록 서버 API를 사용합니다.
        const triggerDownload = (fileName: string) => {
-         const r2BaseUrl = process.env.NEXT_PUBLIC_R2_URL || "https://pub-1bb31f7734c744dcbe3d3a0e03d4a6a2.r2.dev";
-         const folder = fileName.startsWith("frame_") ? "frames" : "results";
-         const downloadUrl = `${r2BaseUrl}/${folder}/${fileName}`;
+         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+         const saveName = fileName.startsWith("result_") ? "4cut_photo.jpg" : "4cut_video.mp4";
+         const downloadUrl = `${apiUrl}/api/download/${fileName}?name=${encodeURIComponent(saveName)}`;
          
          const a = document.createElement("a");
          a.href = downloadUrl;
-         a.download = fileName; // 브라우저 정책상 도메인이 다르면 작동 안 할 수 있어 새 창 열기 병행
-         a.target = "_blank";
+         a.target = "_blank"; // 새 창을 열면서 동시에 다운로드 헤더로 인해 저장 팝업 유도
          document.body.appendChild(a);
          a.click();
          document.body.removeChild(a);

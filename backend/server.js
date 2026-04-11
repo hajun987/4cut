@@ -193,19 +193,31 @@ app.get("/api/download/:filename", (req, res) => {
   if (!filename) return res.status(400).json({ error: "Missing filename" });
 
   const targetPath = path.join(resultDir, filename);
+  const downloadName = req.query.name || filename;
+  const encodedName = encodeURIComponent(downloadName);
+
+  // 다운로드 강제 헤더 설정
+  res.setHeader("Content-Disposition", `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+  if (filename.endsWith('.mp4')) res.setHeader("Content-Type", "video/mp4");
+  else if (filename.endsWith('.jpg')) res.setHeader("Content-Type", "image/jpeg");
 
   if (fs.existsSync(targetPath)) {
-    const downloadName = req.query.name || filename;
-    const encodedName = encodeURIComponent(downloadName);
-    res.setHeader("Content-Disposition", `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
-    if (filename.endsWith('.mp4')) res.setHeader("Content-Type", "video/mp4");
-    else if (filename.endsWith('.jpg')) res.setHeader("Content-Type", "image/jpeg");
+    // 1. 로컬에 있을 때
     res.sendFile(targetPath);
   } else {
-    // 로컬에 파일이 없으면 R2로 리다이렉트하여 502/404 방지
+    // 2. 로컬에 없을 때 -> R2에서 스트리밍으로 가져와서 전달 (아이폰에서 저장 기능 보장)
     const r2Url = `${R2_PUBLIC_URL}/results/${filename}`;
-    console.log("[Download] Local file missing, redirecting to R2:", r2Url);
-    res.redirect(r2Url);
+    console.log("[Download] Streaming from R2 to force download:", r2Url);
+    
+    https.get(r2Url, (r2Res) => {
+      if (r2Res.statusCode !== 200) {
+        return res.status(r2Res.statusCode).send("File not found on R2");
+      }
+      r2Res.pipe(res);
+    }).on("error", (err) => {
+      console.error("[Download Error]", err);
+      res.status(500).send("Streaming error");
+    });
   }
 });
 
