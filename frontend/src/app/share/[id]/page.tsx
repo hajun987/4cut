@@ -62,20 +62,13 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
       </button>
 
       {vid && (
-        <>
-          <video 
-            src={`${r2BaseUrl}/results/${vid}`} 
-            controls autoPlay loop muted playsInline 
-            className="w-full rounded-xl shadow-lg border border-zinc-200 mb-4 mt-4" 
-          />
-          <button 
-            onClick={() => doDownload(vid, `4cut_video.mp4`)}
-            className="flex items-center justify-center gap-3 w-full py-4 bg-[#FF4785] text-white font-bold rounded-2xl active:scale-95"
-          >
-            <Film size={20} />
-            동영상 다운로드 받기
-          </button>
-        </>
+        <button 
+          onClick={() => doDownload(vid, `4cut_video.mp4`)}
+          className="flex items-center justify-center gap-3 w-full py-4 bg-[#FF4785] text-white font-bold rounded-2xl active:scale-95 mt-4"
+        >
+          <Film size={20} />
+          동영상 다운로드 받기
+        </button>
       )}
 
       <p className="mt-6 text-xs text-zinc-400 text-center">

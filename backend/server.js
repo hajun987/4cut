@@ -317,14 +317,18 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
   } else {
     // 외부 PNG 프레임일 경우
     let framePath = "";
-    if (frameStr && frameStr.includes("/external-frames/")) {
+    let frameInput = "";
+    if (frameStr && frameStr.startsWith("http")) {
+       frameInput = frameStr;
+    } else if (frameStr && frameStr.includes("/external-frames/")) {
        const parts = frameStr.split("/external-frames/");
-       framePath = path.join(externalFrameDir, decodeURIComponent(parts[1]));
+       const localPath = path.join(externalFrameDir, decodeURIComponent(parts[1]));
+       if (fs.existsSync(localPath)) frameInput = localPath;
     }
     
     // 바탕은 흰색, 영상을 배치한 뒤, 맨 위(5번째 인풋)에 PNG 올리기
-    if (framePath && fs.existsSync(framePath)) {
-       command.input(framePath).inputOptions('-loop 1'); // 0,1,2,3번은 영상, 4번이 PNG 프레임 (무한 루프 설정)
+    if (frameInput) {
+       command.input(frameInput).inputOptions('-loop 1'); // 0,1,2,3번은 영상, 4번이 PNG 프레임 (무한 루프 설정)
        filterComplex = `color=c=white:s=1080x1920:d=4 [base];`;
        filterComplex += `[0:v]${cropFilter} [v1];`;
        filterComplex += `[1:v]${cropFilter} [v2];`;

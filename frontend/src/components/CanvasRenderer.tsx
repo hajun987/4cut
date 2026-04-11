@@ -168,7 +168,8 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
        // 자동 다운로드 - 아이폰에서도 재생이 아닌 '파일 저장'이 되도록 서버 API를 사용합니다.
        const triggerDownload = (fileName: string) => {
          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-         const saveName = fileName.startsWith("result_") ? "4cut_photo.jpg" : "4cut_video.mp4";
+         const isVideo = fileName.toLowerCase().endsWith(".mp4");
+         const saveName = isVideo ? "4cut_video.mp4" : "4cut_photo.jpg";
          const downloadUrl = `${apiUrl}/api/download/${fileName}?name=${encodeURIComponent(saveName)}`;
          
          const a = document.createElement("a");
