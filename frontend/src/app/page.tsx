@@ -30,29 +30,33 @@ export default function Home() {
 
     async function loadInitialData() {
       try {
-        // 1. 서버 설정(비밀 프레임 정보 포함)을 먼저 가져옴
+        console.log("[Debug] API 호출 시작:", apiUrl);
         const configRes = await fetch(`${apiUrl}/api/config`);
         const configData = await configRes.json();
+        console.log("[Debug] 전체 설정 데이터:", configData);
         
         const secretMap = configData.secretFrames || {};
         setSecretFrameMap(secretMap);
 
-        // 2. 코드가 있고 매핑된 프레임이 있다면 즉시 선택
         if (code && secretMap[code]) {
-          setSelectedFrame(secretMap[code]);
+          console.log("[Debug] 비밀 코드 감지 및 프레임 매칭 성공:", code, "=>", secretMap[code]);
+          setSelectedFrame(secretMap[code].trim());
+        } else if (code) {
+          console.warn("[Debug] 코드는 있으나 매핑된 프레임이 없음:", code);
         }
 
-        // 3. 프레임 목록을 가져오고 비밀 프레임은 즉시 필터링
         const framesRes = await fetch(`${apiUrl}/api/frames-list`);
         const allFrames = await framesRes.json();
         
         if (Array.isArray(allFrames)) {
-          const secretUrls = Object.values(secretMap);
-          const filtered = allFrames.filter(url => !secretUrls.includes(url));
+          console.log("[Debug] 전체 프레임 목록:", allFrames);
+          const secretUrls = Object.values(secretMap).map((url: any) => url.trim());
+          const filtered = allFrames.filter(url => !secretUrls.includes(url.trim()));
+          console.log("[Debug] 필터링된 프레임 목록:", filtered);
           setExternalFrames(filtered);
         }
       } catch (err) {
-        console.warn("데이터 로드 중 오류 발생:", err);
+        console.error("[Debug] 데이터 로드 중 치명적 오류:", err);
       }
     }
 
@@ -276,8 +280,8 @@ export default function Home() {
         </div>
       </section>
 
-      <a href="/admin" className="absolute bottom-6 right-6 text-xs font-semibold text-zinc-300 hover:text-zinc-500 z-50">
-        Admin
+      <a href="/admin" className="absolute bottom-6 right-6 text-[8px] font-semibold text-zinc-300 hover:text-zinc-500 z-50">
+        Admin ({process.env.NEXT_PUBLIC_API_URL || "local:4000"})
       </a>
     </div>
   );

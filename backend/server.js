@@ -218,7 +218,15 @@ const uploadResult = multer({ storage: resultStorage });
 const uploadFrame = multer({ storage: frameStorage });
 
 // 설정 라우터
-app.get("/api/config", (req, res) => res.json(config));
+app.get("/api/config", (req, res) => {
+  res.json({
+    intervalSeconds: config.intervalSeconds,
+    maxShots: config.maxShots,
+    readySeconds: config.readySeconds,
+    secretFrames: config.secretFrames || {},
+    frameUrl: config.frameUrl
+  });
+});
 app.post("/api/config", async (req, res) => {
   if (req.body.intervalSeconds) config.intervalSeconds = req.body.intervalSeconds;
   if (req.body.maxShots) config.maxShots = req.body.maxShots;
