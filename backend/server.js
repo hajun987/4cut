@@ -45,11 +45,11 @@ if (!fs.existsSync(externalFrameDir)) fs.mkdirSync(externalFrameDir, { recursive
 if (!fs.existsSync("uploads/frames")) fs.mkdirSync("uploads/frames", { recursive: true });
 
 const resultStorage = multer.diskStorage({
-  destination: "uploads/results/",
+  destination: (req, file, cb) => cb(null, resultDir),
   filename: (req, file, cb) => cb(null, `result_${Date.now()}${path.extname(file.originalname)}`)
 });
 const frameStorage = multer.diskStorage({
-  destination: "uploads/frames/",
+  destination: (req, file, cb) => cb(null, path.join(__dirname, "uploads/frames")),
   filename: (req, file, cb) => cb(null, `frame_${Date.now()}.png`)
 });
 
@@ -76,26 +76,29 @@ app.post("/api/save-result", uploadResult.single("image"), (req, res) => {
 
 // 강제 다운로드 엔드포인트 (Content-Disposition 헤더로 파일명 강제 지정)
 app.get("/api/download/:filename", (req, res) => {
-  const filename = req.params.filename;
-  const filePath = path.join(__dirname, "uploads/results", filename);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
-  
-  const downloadName = req.query.name || filename;
-  const encodedName = encodeURIComponent(downloadName);
-  
-  // RFC 5987 준수하는 filename* 파라미터 추가 (멀티바이트 및 특수문자 대응)
-  res.setHeader("Content-Disposition", `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
-  
-  // 파일 확장자에 따라 MIME 타입 설정
-  if (filename.endsWith('.mp4')) res.setHeader("Content-Type", "video/mp4");
-  else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) res.setHeader("Content-Type", "image/jpeg");
-  
-  res.sendFile(filePath);
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(resultDir, filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
+    
+    const downloadName = req.query.name || filename;
+    const encodedName = encodeURIComponent(downloadName);
+    
+    res.setHeader("Content-Disposition", `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+    
+    if (filename.endsWith('.mp4')) res.setHeader("Content-Type", "video/mp4");
+    else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) res.setHeader("Content-Type", "image/jpeg");
+    
+    res.sendFile(filePath);
+  } catch (err) {
+    console.error("[Download] Error:", err);
+    if (!res.headersSent) res.status(500).json({ error: "Download failed" });
+  }
 });
 
 // 비디오 파일들 보관소
 const videoStorage = multer.diskStorage({
-  destination: "uploads/results/",
+  destination: (req, file, cb) => cb(null, resultDir),
   filename: (req, file, cb) => cb(null, `vid_${Date.now()}_${Math.random().toString(36).substring(7)}.webm`)
 });
 const uploadVideo = multer({ storage: videoStorage, limits: { fileSize: 100 * 1024 * 1024 } });
@@ -140,9 +143,16 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
       .on('start', (cmd) => console.log('[FFmpeg] cmd:', cmd))
       .on('end', () => { 
         console.log('[FFmpeg] Done:', outFilename); 
-        res.json({ url: `${getCurrentBaseUrl(req)}/uploads/results/${outFilename}` }); 
+        if (!res.headersSent) {
+          res.json({ url: `${getCurrentBaseUrl(req)}/uploads/results/${outFilename}` }); 
+        }
       })
-      .on('error', (err) => { console.error('[FFmpeg] Error:', err.message); res.status(500).json({error: 'encoding failed: ' + err.message}); });
+      .on('error', (err) => { 
+        console.error('[FFmpeg] Error:', err.message); 
+        if (!res.headersSent) {
+          res.status(500).json({error: 'encoding failed: ' + err.message}); 
+        }
+      });
   } else {
     // 외부 PNG 프레임일 경우
     let framePath = "";
@@ -184,9 +194,16 @@ app.post("/api/save-video", uploadVideo.array("videos", 4), (req, res) => {
       .on('start', (cmd) => console.log('[FFmpeg] cmd:', cmd))
       .on('end', () => { 
         console.log('[FFmpeg] Done:', outFilename); 
-        res.json({ url: `${getCurrentBaseUrl(req)}/uploads/results/${outFilename}` }); 
+        if (!res.headersSent) {
+          res.json({ url: `${getCurrentBaseUrl(req)}/uploads/results/${outFilename}` }); 
+        }
       })
-      .on('error', (err) => { console.error('[FFmpeg] Error:', err.message); res.status(500).json({error: 'encoding failed: ' + err.message}); });
+      .on('error', (err) => { 
+        console.error('[FFmpeg] Error:', err.message); 
+        if (!res.headersSent) {
+          res.status(500).json({error: 'encoding failed: ' + err.message}); 
+        }
+      });
   }
 });
 
@@ -202,8 +219,12 @@ app.get("/api/frames-list", (req, res) => {
 });
 
 const frameStorageExternal = multer.diskStorage({
-  destination: externalFrameDir,
-  filename: (req, file, cb) => cb(null, Buffer.from(file.originalname, 'latin1').toString('utf8'))
+  destination: (req, file, cb) => cb(null, externalFrameDir),
+  filename: (req, file, cb) => {
+    // 한글 파일명 깨짐 방지
+    const original = file.originalname;
+    cb(null, original);
+  }
 });
 const uploadFrameExternal = multer({ storage: frameStorageExternal });
 
