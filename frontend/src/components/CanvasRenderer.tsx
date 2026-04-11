@@ -147,11 +147,9 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
               body: videoFormData
            });
            
-           if (videoRes.ok) {
             if (videoRes.ok) {
               const vData = await videoRes.json();
               uploadedVideoUrl = vData.url;
-              // R2 URL(https://.../results/filename.mp4)에서 파일명만 추출
               const parts = uploadedVideoUrl.split("/");
               uploadedVideoId = parts[parts.length - 1];
             } else {
@@ -159,9 +157,9 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
               console.error("[Video] Server error:", videoRes.status, errBody);
             }
           }
-       } catch (e) {
+        } catch (e) {
           console.error("비디오 렌더링 실패:", e);
-       }
+        }
  
        setLoadingText("완료되었습니다!");
  
