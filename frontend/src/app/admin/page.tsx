@@ -253,25 +253,51 @@ export default function AdminPage() {
 
             {frames.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {frames.map((url, idx) => (
-                  <div key={idx} className="relative group rounded-xl overflow-hidden border border-zinc-200 bg-zinc-100 aspect-[1080/1920]">
-                    <img src={url} alt="frame thumbnail" className="w-full h-full object-contain" />
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 backdrop-blur-sm">
-                       <button 
-                         onClick={() => handleAssignSecretCode(url)}
-                         className="w-3/4 py-2 bg-primary text-white font-bold rounded-lg shadow-lg hover:scale-105 transition-all text-sm flex items-center justify-center gap-2"
-                       >
-                         🔑 코드 부여
-                       </button>
-                       <button 
-                         onClick={() => handleDeleteFrame(url)}
-                         className="w-3/4 py-2 bg-red-500 text-white font-bold rounded-lg shadow-lg hover:bg-red-600 hover:scale-105 transition-all text-sm flex items-center justify-center gap-2"
-                       >
-                         🗑️ 삭제
-                       </button>
+                {frames.map((url, idx) => {
+                  const isSecret = Object.values(secretFrames).includes(url);
+                  const assignedCode = Object.entries(secretFrames).find(([_, fUrl]) => fUrl === url)?.[0];
+
+                  return (
+                    <div key={idx} className="relative group rounded-xl overflow-hidden border border-zinc-200 bg-zinc-100 aspect-[1080/1920]">
+                      <img 
+                        src={url} 
+                        alt="frame thumbnail" 
+                        className={`w-full h-full object-contain transition-all ${isSecret ? 'brightness-[0.4] grayscale-[0.5]' : ''}`} 
+                      />
+                      
+                      {/* 비밀 코드 배지 */}
+                      {isSecret && (
+                        <div className="absolute top-2 right-2 bg-yellow-400 text-black text-[10px] font-black px-2 py-1 rounded-md shadow-lg flex items-center gap-1 z-10">
+                          🔑 {assignedCode}
+                        </div>
+                      )}
+
+                      {/* 중앙 상태 문구 */}
+                      {isSecret && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <span className="text-white/40 text-[10px] font-black uppercase tracking-widest border border-white/20 px-2 py-1 rounded">
+                            Secret Code Active
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 backdrop-blur-sm">
+                         <button 
+                           onClick={() => handleAssignSecretCode(url)}
+                           className="w-3/4 py-2 bg-primary text-white font-bold rounded-lg shadow-lg hover:scale-105 transition-all text-sm flex items-center justify-center gap-2"
+                         >
+                           {isSecret ? "🔑 코드 변경" : "🔑 코드 부여"}
+                         </button>
+                         <button 
+                           onClick={() => handleDeleteFrame(url)}
+                           className="w-3/4 py-2 bg-red-500 text-white font-bold rounded-lg shadow-lg hover:bg-red-600 hover:scale-105 transition-all text-sm flex items-center justify-center gap-2"
+                         >
+                           🗑️ 삭제
+                         </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="w-full py-16 border-2 border-dashed border-zinc-200 rounded-2xl flex flex-col items-center justify-center text-zinc-400 bg-zinc-50/50">
