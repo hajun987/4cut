@@ -165,7 +165,6 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
         }
  
         }
-      }
        setLoadingText("완료되었습니다!");
  
        // 자동 다운로드 - 아이폰에서도 재생이 아닌 '파일 저장'이 되도록 서버 API를 사용합니다.
