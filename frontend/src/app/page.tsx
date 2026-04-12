@@ -28,10 +28,25 @@ export default function Home() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [engineLoaded, setEngineLoaded] = useState(false);
 
+  // 0. 촬영 환경 설정 상태 (URL 파라미터 우선)
+  const [readySeconds, setReadySeconds] = useState(10);
+  const [intervalSeconds, setIntervalSeconds] = useState(6);
+  const [maxShots, setMaxShots] = useState(6);
+  const [showSettings, setShowSettings] = useState(false);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     if (code) setSecretCode(code);
+
+    // URL에서 설정값 읽기
+    const urlReady = params.get("ready");
+    const urlInterval = params.get("interval");
+    const urlShots = params.get("shots");
+
+    if (urlReady) setReadySeconds(Number(urlReady));
+    if (urlInterval) setIntervalSeconds(Number(urlInterval));
+    if (urlShots) setMaxShots(Number(urlShots));
 
     async function loadEngine() {
       try {
@@ -92,6 +107,18 @@ export default function Home() {
     loadInitialData();
   }, []);
 
+  // 설정값이 바뀔 때마다 URL 동기화
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    params.set("ready", readySeconds.toString());
+    params.set("interval", intervalSeconds.toString());
+    params.set("shots", maxShots.toString());
+    
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState({}, "", newUrl);
+  }, [readySeconds, intervalSeconds, maxShots]);
+
   if (step === "HOME") {
     return (
       <div className="w-full min-h-[100dvh] flex flex-col items-center justify-center bg-white text-zinc-900 border-t-8 border-primary relative">
@@ -103,12 +130,47 @@ export default function Home() {
           <p className="text-zinc-500 font-medium mb-12 text-xl">가장 빛나는 오늘의 모습을 남겨보세요 ✨</p>
           
           {engineLoaded ? (
-            <button 
-              onClick={() => setStep("SHOOTING")}
-              className="px-16 py-6 bg-primary text-white text-3xl font-black rounded-full shadow-[0_15px_30px_rgba(255,71,133,0.4)] transition-transform hover:scale-110 active:scale-95 animate-in zoom-in duration-500"
-            >
-              시작하기
-            </button>
+            <div className="flex flex-col items-center gap-6">
+              <button 
+                onClick={() => setStep("SHOOTING")}
+                className="px-16 py-6 bg-primary text-white text-3xl font-black rounded-full shadow-[0_15px_30px_rgba(255,71,133,0.4)] transition-transform hover:scale-110 active:scale-95 animate-in zoom-in duration-500"
+              >
+                시작하기
+              </button>
+              
+              <button 
+                onClick={() => setShowSettings(!showSettings)}
+                className="text-zinc-400 font-bold hover:text-primary transition-colors text-sm underline underline-offset-4"
+              >
+                {showSettings ? "⚙️ 설정 닫기" : "⚙️ 촬영 환경 설정"}
+              </button>
+
+              {showSettings && (
+                <div className="mt-4 p-6 bg-zinc-50 rounded-3xl border-2 border-zinc-100 flex flex-col gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                  <div className="flex items-center justify-between gap-8">
+                    <label className="text-sm font-bold text-zinc-600">준비 시간</label>
+                    <div className="flex items-center gap-2">
+                       <input type="range" min="3" max="20" value={readySeconds} onChange={(e) => setReadySeconds(Number(e.target.value))} className="accent-primary w-24" />
+                       <span className="text-primary font-black w-8">{readySeconds}초</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-8">
+                    <label className="text-sm font-bold text-zinc-600">촬영 간격</label>
+                    <div className="flex items-center gap-2">
+                       <input type="range" min="3" max="15" value={intervalSeconds} onChange={(e) => setIntervalSeconds(Number(e.target.value))} className="accent-primary w-24" />
+                       <span className="text-primary font-black w-8">{intervalSeconds}초</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-8">
+                    <label className="text-sm font-bold text-zinc-600">총 촬영 컷</label>
+                    <div className="flex items-center gap-2">
+                       <input type="range" min="4" max="10" value={maxShots} onChange={(e) => setMaxShots(Number(e.target.value))} className="accent-primary w-24" />
+                       <span className="text-primary font-black w-8">{maxShots}장</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="flex flex-col items-center gap-4">
               <div className="w-64 h-3 bg-zinc-100 rounded-full overflow-hidden relative">
@@ -125,7 +187,6 @@ export default function Home() {
     );
   }
 
-  if (step === "SHOOTING") {
     return (
       <div className="w-full min-h-[100dvh] flex flex-col items-center justify-center bg-zinc-50 relative">
         <WebcamCapture 
@@ -136,6 +197,10 @@ export default function Home() {
           isCapturing={isCapturing}
           setIsCapturing={setIsCapturing}
           onComplete={() => setStep("SELECTION")}
+          // URL 또는 홈 화면에서 설정된 값 전달
+          initialReadySeconds={readySeconds}
+          initialIntervalSeconds={intervalSeconds}
+          initialMaxShots={maxShots}
         />
 
       </div>

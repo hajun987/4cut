@@ -14,6 +14,11 @@ export default function AdminPage() {
   const [secretFrames, setSecretFrames] = useState<Record<string, string>>({}); // { "코드": "프레임URL" }
   const [isSaving, setIsSaving] = useState(false);
   
+  // 모달 상태 관리
+  const [showCodeModal, setShowCodeModal] = useState(false);
+  const [modalFrameUrl, setModalFrameUrl] = useState("");
+  const [modalCodeValue, setModalCodeValue] = useState("");
+  
   const [frames, setFrames] = useState<string[]>([]);
 
   const checkPassword = (e: React.FormEvent) => {
@@ -107,19 +112,30 @@ export default function AdminPage() {
     }
   };
 
-  // 비밀 코드 할당 함수
+  // 비밀 코드 할당 모달 열기
   const handleAssignSecretCode = (frameUrl: string) => {
-    const code = prompt("이 프레임에 부여할 고유 코드를 입력하세요 (예: event_vip):");
-    if (!code) return;
+    const existingCode = Object.entries(secretFrames).find(([_, fUrl]) => fUrl === frameUrl)?.[0] || "";
+    setModalFrameUrl(frameUrl);
+    setModalCodeValue(existingCode);
+    setShowCodeModal(true);
+  };
+
+  const saveCodeFromModal = () => {
+    if (!modalCodeValue.trim()) {
+      alert("코드를 입력해주세요.");
+      return;
+    }
     
-    // 이미 존재하는 코드인지 확인
-    if (secretFrames[code]) {
-      if (!confirm("이미 존재하는 코드입니다. 프레임을 교체하시겠습니까?")) return;
+    // 이미 다른 프레임에 동일한 코드가 있는지 확인 (현재 프레임 제외)
+    const duplicateCode = Object.entries(secretFrames).find(([code, fUrl]) => code === modalCodeValue && fUrl !== modalFrameUrl);
+    if (duplicateCode) {
+      if (!confirm("이미 다른 프레임에 지정된 코드입니다. 이 프레임으로 변경하시겠습니까?")) return;
     }
 
-    const newSecretFrames = { ...secretFrames, [code]: frameUrl };
+    const newSecretFrames = { ...secretFrames, [modalCodeValue.trim()]: modalFrameUrl };
     setSecretFrames(newSecretFrames);
     updateSecretFramesOnServer(newSecretFrames);
+    setShowCodeModal(false);
   };
 
   const handleRemoveSecretCode = (code: string) => {
@@ -384,6 +400,40 @@ export default function AdminPage() {
           )}
         </section>
       </div>
+
+      {/* 커스텀 코드 입력 모달 */}
+      {showCodeModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-black mb-2 flex items-center gap-2">🔑 고유 코드 설정</h3>
+            <p className="text-sm text-zinc-500 mb-6 font-medium break-keep">이 프레임에 접근할 수 있는 특별한 단어나 코드를 입력하세요.</p>
+            
+            <input 
+              type="text"
+              placeholder="예: event_2026"
+              value={modalCodeValue}
+              onChange={(e) => setModalCodeValue(e.target.value)}
+              className="w-full border-2 border-zinc-200 p-4 rounded-xl text-lg font-bold outline-none focus:border-primary transition-colors mb-6"
+              autoFocus
+            />
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowCodeModal(false)}
+                className="flex-1 py-4 bg-zinc-100 text-zinc-500 font-bold rounded-xl hover:bg-zinc-200 transition-colors"
+              >
+                취소
+              </button>
+              <button 
+                onClick={saveCodeFromModal}
+                className="flex-1 py-4 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+              >
+                적용하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

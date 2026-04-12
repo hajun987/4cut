@@ -7,9 +7,15 @@ interface WebcamCaptureProps {
   isCapturing: boolean;
   setIsCapturing: (val: boolean) => void;
   onComplete: () => void;
+  initialReadySeconds?: number;
+  initialIntervalSeconds?: number;
+  initialMaxShots?: number;
 }
 
-export default function WebcamCapture({ onCapture, isCapturing, setIsCapturing, onComplete }: WebcamCaptureProps) {
+export default function WebcamCapture({ 
+  onCapture, isCapturing, setIsCapturing, onComplete,
+  initialReadySeconds, initialIntervalSeconds, initialMaxShots
+}: WebcamCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -17,9 +23,9 @@ export default function WebcamCapture({ onCapture, isCapturing, setIsCapturing, 
   
   const [countdown, setCountdown] = useState<number | null>(null);
   const [showFlash, setShowFlash] = useState(false);
-  const [maxShots, setMaxShots] = useState(6);
-  const [intervalSeconds, setIntervalSeconds] = useState(6);
-  const [readySeconds, setReadySeconds] = useState(10);
+  const [maxShots, setMaxShots] = useState(initialMaxShots || 6);
+  const [intervalSeconds, setIntervalSeconds] = useState(initialIntervalSeconds || 6);
+  const [readySeconds, setReadySeconds] = useState(initialReadySeconds || 10);
   const [shotCount, setShotCount] = useState(0);
 
   const [setupCountdown, setSetupCountdown] = useState<number | null>(null);
@@ -39,9 +45,10 @@ export default function WebcamCapture({ onCapture, isCapturing, setIsCapturing, 
       .then(res => res.json())
       .then(data => {
         if (!isMounted) return;
-        if (data.maxShots) setMaxShots(data.maxShots);
-        if (data.intervalSeconds) setIntervalSeconds(data.intervalSeconds);
-        if (data.readySeconds !== undefined) {
+        // Props(URL)로 전달된 값이 없을 때만 서버 설정을 따름
+        if (!initialMaxShots && data.maxShots) setMaxShots(data.maxShots);
+        if (!initialIntervalSeconds && data.intervalSeconds) setIntervalSeconds(data.intervalSeconds);
+        if (!initialReadySeconds && data.readySeconds !== undefined) {
           setReadySeconds(data.readySeconds);
           rc = data.readySeconds;
         }
