@@ -12,6 +12,7 @@ export default function Home() {
   const [shots, setShots] = useState<string[]>([]);
   const [shotVideos, setShotVideos] = useState<Blob[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<(string | null)[]>([null, null, null, null]);
+  const [selectedIndices, setSelectedIndices] = useState<(number | null)[]>([null, null, null, null]);
   const [isCapturing, setIsCapturing] = useState(false);
   
   const [selectedFrame, setSelectedFrame] = useState<string>("#FFFFFF");
@@ -147,8 +148,8 @@ export default function Home() {
        ? `${baseUrl}/share/${finalImageId}?vid=${finalVideoId}` 
        : `${baseUrl}/share/${finalImageId}`;
     
-    // finalQrUrl 대신 finalQrUrl(서버) 혹은 local 미리보기(base64)를 상황에 맞춰 사용하도록 ResultQR에 전달
-    return <ResultQR url={qrTargetUrl} imagePreview={finalQrUrl || ""} imageId={finalImageId} videoId={finalVideoId || undefined} />;
+    // finalQrUrl에 로컬 데이터(base64)가 들어있으므로 즉시 미리보기가 가능합니다.
+    return <ResultQR url={qrTargetUrl} imagePreview={finalQrUrl} imageId={finalImageId} videoId={finalVideoId || undefined} />;
   }
 
   const pastelColors = [
@@ -156,10 +157,11 @@ export default function Home() {
   ];
 
   return (
-    <div className="w-full min-h-[100dvh] flex flex-col lg:flex-row relative bg-white text-zinc-900 border-t-8 border-primary overflow-x-hidden lg:overflow-visible">
+  return (
+    <div className="w-full min-h-screen flex flex-col lg:flex-row relative bg-white text-zinc-900 border-t-8 border-primary overflow-x-hidden lg:overflow-visible font-sans">
       
-      {/* 1. 상단 프리뷰 영역 (모바일 55dvh, 데스크탑 최소 화면 높이 보장) */}
-      <section className="h-[55dvh] lg:min-h-screen lg:h-auto lg:flex-[1.2] flex flex-col items-center justify-center p-4 lg:p-12 bg-zinc-100 relative border-b lg:border-b-0 lg:border-l border-zinc-200 order-1 lg:order-2">
+      {/* 1. 상단 프리뷰 영역 (데스크탑에서 전체 화면을 꽉 채우도록 설정) */}
+      <section className="h-[55dvh] lg:h-screen lg:min-h-screen lg:flex-[1.2] flex flex-col items-center justify-center p-4 lg:p-12 bg-zinc-100 relative border-b lg:border-b-0 lg:border-l border-zinc-200 order-1 lg:order-2 overflow-hidden">
         <div className="w-full h-full max-h-[100%] flex items-center justify-center mb-0 lg:mb-8 perspective">
           <div className="h-full aspect-[1080/1920] relative rounded-lg bg-zinc-200/50 shadow-[0_15px_40px_rgba(0,0,0,0.15)] overflow-hidden transition-transform duration-500 transform lg:hover:scale-[1.02]">
             <PhotoSelector selectedSlots={selectedSlots} setSelectedSlots={setSelectedSlots} />
@@ -176,12 +178,13 @@ export default function Home() {
         <div className="hidden lg:flex w-full items-center justify-center">
             {step !== "SELECTION" && (
               <CanvasRenderer 
-                selectedSlots={selectedSlots as string[]} 
+                selectedSlots={selectedSlots} 
+                selectedIndices={selectedIndices}
                 selectedFrame={selectedFrame}
                 shotImages={shots}
                 shotVideos={shotVideos}
                 onUploaded={(url, id, vidId, localUrl) => {
-                  // localUrl(베이스64)이 있으면 그것을 우선적으로 미리보기에 사용하도록 설정
+                  // localUrl(베이스64)을 우선적으로 미리보기에 사용하여 엑박 방지
                   setFinalQrUrl(localUrl || url); 
                   setFinalImageId(id);
                   if (vidId) setFinalVideoId(vidId);
@@ -192,8 +195,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 2. 하단 리스트/컨트롤 영역 (모바일 45dvh, 데스크탑 최소 화면 높이 보장) */}
-      <section className="h-[45dvh] lg:min-h-screen lg:h-auto lg:flex-1 flex flex-col p-4 lg:p-12 justify-center bg-zinc-50 border-t lg:border-t-0 lg:border-r border-zinc-200 z-20 order-2 lg:order-1 relative">
+      {/* 2. 하단 리스트/컨트롤 영역 (데스크탑에서 전체 화면을 꽉 채우도록 설정) */}
+      <section className="h-[45dvh] lg:h-screen lg:min-h-screen lg:flex-1 flex flex-col p-4 lg:p-12 justify-center bg-zinc-50 border-t lg:border-t-0 lg:border-r border-zinc-200 z-20 order-2 lg:order-1 relative overflow-y-auto">
         {step === "SELECTION" ? (
           <>
             <div className="mb-2 lg:mb-6 pt-0 lg:pt-4 text-center lg:text-left">
@@ -214,19 +217,24 @@ export default function Home() {
                         ${isSelected ? 'opacity-40 grayscale blur-[0.5px]' : 'hover:border-primary'}
                       `}
                       onClick={() => {
-                        if (isSelected) {
                           const slotIndex = selectedSlots.indexOf(shot);
                           if (slotIndex > -1) {
                             const newSlots = [...selectedSlots];
+                            const newIndices = [...selectedIndices];
                             newSlots[slotIndex] = null;
+                            newIndices[slotIndex] = null;
                             setSelectedSlots(newSlots);
+                            setSelectedIndices(newIndices);
                           }
                         } else {
                           const firstEmptyIndex = selectedSlots.findIndex(slot => slot === null);
                           if (firstEmptyIndex !== -1) {
                             const newSlots = [...selectedSlots];
+                            const newIndices = [...selectedIndices];
                             newSlots[firstEmptyIndex] = shot;
+                            newIndices[firstEmptyIndex] = idx;
                             setSelectedSlots(newSlots);
+                            setSelectedIndices(newIndices);
                           }
                         }
                       }}
@@ -288,12 +296,14 @@ export default function Home() {
             {/* 프레임 선택 완료 버튼 (모바일) */}
             <div className="mt-2 flex lg:hidden justify-center items-center">
               <CanvasRenderer 
-                selectedSlots={selectedSlots as string[]} 
+                selectedSlots={selectedSlots} 
+                selectedIndices={selectedIndices}
                 selectedFrame={selectedFrame}
                 shotImages={shots}
                 shotVideos={shotVideos}
-                onUploaded={(url, id, vidId) => {
-                  setFinalQrUrl(url); setFinalImageId(id);
+                onUploaded={(url, id, vidId, localUrl) => {
+                  setFinalQrUrl(localUrl || url); 
+                  setFinalImageId(id);
                   if (vidId) setFinalVideoId(vidId);
                   setStep("RESULT");
                 }}

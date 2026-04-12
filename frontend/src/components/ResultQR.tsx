@@ -28,12 +28,12 @@ export default function ResultQR({ url, imagePreview, imageId, videoId }: Result
   };
 
   return (
-    <div className="min-h-[100dvh] bg-zinc-950 p-4 lg:p-12 flex items-center justify-center overflow-x-hidden">
+    <div className="min-h-screen bg-zinc-950 p-4 lg:p-12 flex items-center justify-center overflow-x-hidden">
       <div className="max-w-6xl w-full mx-auto flex flex-col lg:flex-row gap-8 lg:gap-20 items-center justify-center">
         
         {/* 완성된 사진 프리뷰 (모바일 최소 높이 강제 확보) */}
         {imagePreview && (
-          <div className="flex-[2] lg:flex-1 flex justify-center w-full min-h-[50dvh] lg:min-h-screen items-center">
+          <div className="flex-[2] lg:flex-1 flex justify-center w-full min-h-[50dvh] lg:h-screen items-center">
             <img 
               crossOrigin={imagePreview.startsWith("data:") ? undefined : "anonymous"}
               src={imagePreview} 

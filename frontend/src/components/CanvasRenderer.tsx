@@ -3,14 +3,15 @@
 import { useState, useRef } from "react";
 
 interface CanvasRendererProps {
-  selectedSlots: string[];
+  selectedSlots: (string | null)[];
+  selectedIndices: (number | null)[];
   selectedFrame: string;
   shotImages: string[];
   shotVideos: Blob[];
   onUploaded: (serverResultUrl: string, finalImageId: string, videoId?: string, localPreviewUrl?: string) => void;
 }
 
-export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImages, shotVideos, onUploaded }: CanvasRendererProps) {
+export default function CanvasRenderer({ selectedSlots, selectedIndices, selectedFrame, shotImages, shotVideos, onUploaded }: CanvasRendererProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [loadingText, setLoadingText] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -126,13 +127,11 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
       if (mode === 'video') {
         setLoadingText("브라우저에서 영상을 직접 합성 중입니다 (쾌속 모드) 🚀");
         try {
-          // 1. 선택된 슬롯의 인덱스를 찾아 해당 비디오 조각들 수집
+          // 1. 선택된 인덱스를 활용하여 비디오 조각들 수집 (정확도 100%)
           const videoBlobs: Blob[] = [];
-          selectedSlots.forEach((slotDataUrl) => {
-            // 선택된 사진의 데이터URL을 shots 배열에서 찾아 실제 촬영된 순서(index)를 파악
-            const index = shotImages.indexOf(slotDataUrl);
-            if (index !== -1 && shotVideos[index]) {
-              videoBlobs.push(shotVideos[index]);
+          selectedIndices.forEach((shotIdx) => {
+            if (shotIdx !== null && shotVideos[shotIdx]) {
+              videoBlobs.push(shotVideos[shotIdx]);
             }
           });
 

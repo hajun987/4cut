@@ -11,8 +11,13 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
   const vid = searchParams.get("vid");
   
   const { id } = resolvedParams;
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
   const r2BaseUrl = process.env.NEXT_PUBLIC_R2_URL || "https://pub-1bb31f7734c744dcbe3d3a0e03d4a6a2.r2.dev";
-  const imageUrl = `${r2BaseUrl}/results/${id}`;
+  const rawImageUrl = `${r2BaseUrl}/results/${id}`;
+  const rawVideoUrl = vid ? `${r2BaseUrl}/results/${vid}` : null;
+  
+  // CORS 회피를 위해 서버 프록시 경유
+  const imageUrl = `${apiBaseUrl}/api/proxy-image?url=${encodeURIComponent(rawImageUrl)}`;
 
   useEffect(() => {
     try {
@@ -53,6 +58,21 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
 
       <img crossOrigin="anonymous" src={imageUrl} alt="Result" className="w-full rounded-xl shadow-lg border border-zinc-200 mb-4" />
 
+      {vid && (
+        <div className="mb-6">
+          <h2 className="text-lg font-bold mb-2">🎞️ 타임랩스 영상</h2>
+          <div className="aspect-[1080/1920] w-full max-w-[300px] mx-auto rounded-xl overflow-hidden shadow-md bg-black">
+            <video 
+              controls 
+              playsInline 
+              crossOrigin="anonymous"
+              src={rawVideoUrl || ""} 
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </div>
+      )}
+
       <button 
         onClick={() => doDownload(id, `4cut_photo.jpg`)}
         className="flex items-center justify-center gap-3 w-full py-4 bg-black text-white font-bold rounded-2xl active:scale-95 mb-4"
@@ -64,7 +84,7 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
       {vid && (
         <button 
           onClick={() => doDownload(vid, `4cut_video.mp4`)}
-          className="flex items-center justify-center gap-3 w-full py-4 bg-[#FF4785] text-white font-bold rounded-2xl active:scale-95 mt-4"
+          className="flex items-center justify-center gap-3 w-full py-4 bg-[#FF4785] text-white font-bold rounded-2xl active:scale-95 transition-all"
         >
           <Film size={20} />
           동영상 다운로드 받기

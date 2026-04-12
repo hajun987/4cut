@@ -13,7 +13,8 @@ export const composeVideoOnClient = async (
     await ffmpeg.writeFile(`v${i+1}.webm`, await fetchFile(videoBlobs[i]));
   }
 
-  const cropFilter = "hflip,scale=465:691,setsar=1";
+  const cropImgRatio = 465 / 691;
+  const cropFilter = `hflip,crop=min(iw\\,ih*${cropImgRatio}):min(ih\\,iw/${cropImgRatio}),scale=465:691,setsar=1`;
   let filterComplex = "";
 
   if (frameUrlOrColor.startsWith("#")) {

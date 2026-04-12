@@ -22,7 +22,6 @@ const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "53030f7c5ab8bccccad67b
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || "6dee324261a5346e7197f37fd44564768b347cf4f661831ccffb76a629cf29f3";
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || "4cut-photos";
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || "https://pub-1bb31f7734c744dcbe3d3a0e03d4a6a2.r2.dev";
-
 const s3Client = new S3Client({
   region: "auto",
   endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -298,24 +297,25 @@ app.get("/api/download/:filename", (req, res) => {
   if (!filename) return res.status(400).json({ error: "Missing filename" });
 
   const targetPath = path.join(resultDir, filename);
-  // 1. 파일명 및 확장자 보정 (끝까지 확장자가 없으면 폴백)
+  // 1. 파일명 및 확장자 보정
   let downloadName = req.query.name || "4cut_result";
   if (!downloadName.includes('.')) {
     downloadName += filename.endsWith('.mp4') ? '.mp4' : '.jpg';
   }
 
-
-
   // 헤더 설정 (미리 설정 - R2 스트리밍 및 로컬 모두 적용)
   if (filename.endsWith('.mp4')) res.setHeader("Content-Type", "video/mp4");
   else if (filename.endsWith('.jpg')) res.setHeader("Content-Type", "image/jpeg");
 
+  // Content-Disposition 헤더 강제 주입 (UTF-8 인코딩 포함)
+  const encodedName = encodeURIComponent(downloadName);
+  res.setHeader("Content-Disposition", `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+
   if (fs.existsSync(targetPath)) {
-    // 1. 로컬에 있을 때 -> res.download가 Content-Disposition을 완벽히 생성해줌
-    return res.download(targetPath, downloadName);
+    // 1. 로컬에 있을 때
+    return res.sendFile(targetPath);
   } else {
-    // 2. 로컬에 없을 때 -> R2 스트리밍 (수동으로 attachment 설정 필요)
-    res.attachment(downloadName);
+    // 2. 로컬에 없을 때 -> R2 스트리밍
     const r2Url = `${R2_PUBLIC_URL}/results/${filename}`;
     console.log("[Download] Streaming from R2 with force name:", downloadName);
     
