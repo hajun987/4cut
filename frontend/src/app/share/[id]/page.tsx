@@ -37,10 +37,9 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
   }, [id]);
 
   const handleManualDownload = async (serverFile: string, saveName: string) => {
-    // 아이폰에서도 '파일로 저장'이 가능하도록 서버의 다운로드 API를 경유합니다.
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     const downloadUrl = `${apiUrl}/api/download/${serverFile}?name=${encodeURIComponent(saveName)}`;
-    window.open(downloadUrl, "_blank");
+    window.location.assign(downloadUrl);
   };
 
   const doDownload = handleManualDownload;
@@ -56,22 +55,11 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
         <p className="text-center text-zinc-500 text-sm mb-4">촬영: {timestampStr}</p>
       )}
 
-      <img crossOrigin="anonymous" src={imageUrl} alt="Result" className="w-full rounded-xl shadow-lg border border-zinc-200 mb-4" />
+      <p className="text-center text-zinc-400 text-[11px] mb-8">
+        💡 사진을 길게 누르면 바로 '사진 앱'에 저장할 수 있습니다.
+      </p>
 
-      {vid && (
-        <div className="mb-6">
-          <h2 className="text-lg font-bold mb-2">🎞️ 타임랩스 영상</h2>
-          <div className="aspect-[1080/1920] w-full max-w-[300px] mx-auto rounded-xl overflow-hidden shadow-md bg-black">
-            <video 
-              controls 
-              playsInline 
-              crossOrigin="anonymous"
-              src={rawVideoUrl || ""} 
-              className="w-full h-full object-cover"
-            />
-          </div>
-        </div>
-      )}
+      <img crossOrigin="anonymous" src={imageUrl} alt="Result" className="w-full rounded-xl shadow-lg border border-zinc-200 mb-4" />
 
       <button 
         onClick={() => doDownload(id, `4cut_photo.jpg`)}

@@ -19,12 +19,7 @@ export default function ResultQR({ url, imagePreview, imageId, videoId }: Result
     const saveName = isVideo ? "4cut_video.mp4" : "4cut_photo.jpg";
     const downloadUrl = `${apiUrl}/api/download/${fileName}?name=${encodeURIComponent(saveName)}`;
     
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.target = "_blank";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    window.location.assign(downloadUrl);
   };
 
   return (
