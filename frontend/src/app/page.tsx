@@ -195,6 +195,7 @@ export default function Home() {
     return (
       <div className="w-full min-h-[100dvh] flex flex-col items-center justify-center bg-white text-zinc-900 border-t-8 border-primary relative">
         <div className="absolute inset-0 bg-primary/5 pattern-dots pointer-events-none" />
+        <div className="z-10 bg-white p-16 rounded-[3rem] shadow-[0_20px_60px_rgba(255,71,133,0.15)] flex flex-col items-center text-center border-2 border-primary/10">
           {greetingMessage && (
             <div className="mb-6 px-6 py-3 bg-primary/10 rounded-2xl animate-bounce-subtle border border-primary/20">
               <p className="text-primary font-black text-lg">✨ {greetingMessage} ✨</p>
