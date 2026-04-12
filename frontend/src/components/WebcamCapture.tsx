@@ -211,9 +211,9 @@ export default function WebcamCapture({
          console.error(`[Rec] Shot ${i+1}: takePhotoAndCrop returned undefined!`);
       }
       
-      // 4. 플래시는 200ms 뒤에 꺼지지만, 정지 화면은 800ms 유지하여 확인 피드백 제공
+      // 4. 플래시는 200ms 뒤에 꺼지지만, 정지 화면은 1000ms 유지하여 확인 피드백 제공
       setTimeout(() => setShowFlash(false), 200);
-      await new Promise(res => setTimeout(res, 800));
+      await new Promise(res => setTimeout(res, 1000));
       setFreezeImage(null); // 정지 화면 해제 및 카메라 복귀
 
       currentCount++;
