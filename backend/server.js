@@ -297,23 +297,29 @@ app.get("/api/download/:filename", (req, res) => {
   if (!filename) return res.status(400).json({ error: "Missing filename" });
 
   const targetPath = path.join(resultDir, filename);
-  // 1. 파일명 및 확장자 보정
+  // 1. 파일명 및 확장자 보정 (ID 접두어 기반 판별 강화)
   let downloadName = req.query.name || "4cut_result";
+  const isVideo = filename.startsWith('vid_') || filename.endsWith('.mp4');
+  
   if (!downloadName.includes('.')) {
-    downloadName += filename.endsWith('.mp4') ? '.mp4' : '.jpg';
+    downloadName += isVideo ? '.mp4' : '.jpg';
   }
 
   // 헤더 설정 (미리 설정 - R2 스트리밍 및 로컬 모두 적용)
-  if (filename.endsWith('.mp4')) res.setHeader("Content-Type", "video/mp4");
-  else if (filename.endsWith('.jpg')) res.setHeader("Content-Type", "image/jpeg");
+  if (isVideo) res.setHeader("Content-Type", "video/mp4");
+  else res.setHeader("Content-Type", "image/jpeg");
 
   // Content-Disposition 헤더 강제 주입 (UTF-8 인코딩 포함)
   const encodedName = encodeURIComponent(downloadName);
   res.setHeader("Content-Disposition", `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
 
   if (fs.existsSync(targetPath)) {
-    // 1. 로컬에 있을 때
-    return res.sendFile(targetPath);
+    // 1. 로컬에 있을 때 (res.download는 헤더를 자동으로 맞춰주지만, 이미 설정한 헤더와 충돌하지 않게 주의)
+    return res.download(targetPath, downloadName, (err) => {
+       if (err && !res.headersSent) {
+         res.status(500).send("Download failed");
+       }
+    });
   } else {
     // 2. 로컬에 없을 때 -> R2 스트리밍
     const r2Url = `${R2_PUBLIC_URL}/results/${filename}`;

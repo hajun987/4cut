@@ -44,10 +44,10 @@ export const composeVideoOnClient = async (
     filterComplex += `[1:v]${cropFilter} [v2];`;
     filterComplex += `[2:v]${cropFilter} [v3];`;
     filterComplex += `[3:v]${cropFilter} [v4];`;
-    filterComplex += `[bg][v1]overlay=63:76:shortest=1[o1];`;
-    filterComplex += `[o1][v2]overlay=550:76:shortest=1[o2];`;
-    filterComplex += `[o2][v3]overlay=63:789:shortest=1[o3];`;
-    filterComplex += `[o3][v4]overlay=550:789:shortest=1[out]`;
+    filterComplex += `[bg][v1]overlay=63:76[o1];`;
+    filterComplex += `[o1][v2]overlay=550:76[o2];`;
+    filterComplex += `[o2][v3]overlay=63:789[o3];`;
+    filterComplex += `[o3][v4]overlay=550:789[out]`;
   } else {
     // 이미지 프레임일 때 - R2 CORS 이슈 방지를 위해 프록시 주소 활용
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -74,19 +74,20 @@ export const composeVideoOnClient = async (
     filterComplex += `[1:v]${cropFilter} [v2];`;
     filterComplex += `[2:v]${cropFilter} [v3];`;
     filterComplex += `[3:v]${cropFilter} [v4];`;
-    filterComplex += `[base][v1]overlay=63:76:shortest=1[o1];`;
-    filterComplex += `[o1][v2]overlay=550:76:shortest=1[o2];`;
-    filterComplex += `[o2][v3]overlay=63:789:shortest=1[o3];`;
-    filterComplex += `[o3][v4]overlay=550:789:shortest=1[o4];`;
+    filterComplex += `[base][v1]overlay=63:76[o1];`;
+    filterComplex += `[o1][v2]overlay=550:76[o2];`;
+    filterComplex += `[o2][v3]overlay=63:789[o3];`;
+    filterComplex += `[o3][v4]overlay=550:789[o4];`;
     
     if (hasFrame) {
-      filterComplex += `[o4][4:v]overlay=0:0:shortest=1[out]`;
+      filterComplex += `[o4][4:v]overlay=0:0[out]`;
     } else {
       filterComplex += `[o4]copy[out]`;
     }
   }
 
   const args = [
+    "-fflags", "+genpts", // 누락된 타임스탬프 자동 생성
     "-i", "v1.webm",
     "-i", "v2.webm",
     "-i", "v3.webm",
@@ -104,8 +105,10 @@ export const composeVideoOnClient = async (
     "-pix_fmt", "yuv420p",
     "-t", "4",
     "-preset", "ultrafast",
-    "-threads", "2", // 메모리 안정을 위해 스레드 수를 2로 제한
-    "-crf", "32",    // 압축률을 높여 메모리 점유 감소
+    "-movflags", "+faststart", // 웹 재생 최적화 (moov atom을 앞으로)
+    "-avoid_negative_ts", "make_zero",
+    "-threads", "2",
+    "-crf", "32",
     "output.mp4"
   );
 
