@@ -87,7 +87,6 @@ async function getR2PresignedUrl(key, expiresIn = 86400) {
   }
 }
 
-const { GetObjectCommand: GetObjCmd } = require("@aws-sdk/client-s3");
 async function loadConfigFromR2() {
   try {
     const command = new GetObjectCommand({
@@ -454,7 +453,7 @@ app.post("/api/save-video", uploadSingleVideo.single("video"), async (req, res) 
 // 외부 폴더 (external-frames) 정적 서빙 및 목록 조회
 app.use("/external-frames", express.static(externalFrameDir));
 
-const { ListObjectsV2Command, DeleteObjectCommand, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
+
 
 app.get("/api/frames-list", async (req, res) => {
   try {
