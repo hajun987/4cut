@@ -304,7 +304,7 @@ app.get("/api/download/:filename", (req, res) => {
     downloadName += filename.endsWith('.mp4') ? '.mp4' : '.jpg';
   }
 
-  const targetPath = path.join(resultDir, filename);
+
 
   // 헤더 설정 (미리 설정 - R2 스트리밍 및 로컬 모두 적용)
   if (filename.endsWith('.mp4')) res.setHeader("Content-Type", "video/mp4");

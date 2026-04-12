@@ -36,8 +36,13 @@ export default function Home() {
       try {
         const { FFmpeg } = await import("@ffmpeg/ffmpeg");
         const { toBlobURL } = await import("@ffmpeg/util");
-        const ffmpeg = new (window as any).FFmpegInstance || new FFmpeg();
-        (window as any).FFmpegInstance = ffmpeg;
+        
+        // 이미 생성된 인스턴스가 있으면 재사용, 없으면 신규 생성
+        let ffmpeg = (window as any).FFmpegInstance;
+        if (!ffmpeg) {
+          ffmpeg = new FFmpeg();
+          (window as any).FFmpegInstance = ffmpeg;
+        }
 
         if (ffmpeg.loaded) {
           setEngineLoaded(true);
