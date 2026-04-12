@@ -10,9 +10,16 @@ interface CanvasRendererProps {
   shotVideos: (Blob | null)[];
   onUploaded: (serverResultUrl: string, finalImageId: string, videoId?: string, localPreviewUrl?: string) => void;
   videoDuration?: number;
+  frameText?: string;
+  frameFont?: string;
+  frameFontSize?: number;
+  frameTextColor?: string;
 }
 
-export default function CanvasRenderer({ selectedSlots, selectedIndices, selectedFrame, shotImages, shotVideos, onUploaded, videoDuration = 4 }: CanvasRendererProps) {
+export default function CanvasRenderer({ 
+  selectedSlots, selectedIndices, selectedFrame, shotImages, shotVideos, onUploaded, 
+  videoDuration = 4, frameText, frameFont, frameFontSize = 60, frameTextColor = "#000000" 
+}: CanvasRendererProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [loadingText, setLoadingText] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -89,6 +96,20 @@ export default function CanvasRenderer({ selectedSlots, selectedIndices, selecte
         } catch (e) {
           console.warn("오버레이 프레임 렌더링 실패.", e);
         }
+      }
+
+      // 4. 컬러 프레임일 때만 하단 텍스트 삽입
+      if (selectedFrame.startsWith("#") && frameText) {
+        // 폰트가 로드될 때까지 기다림 (브라우저 캐시 활용)
+        await document.fonts.ready;
+        
+        ctx.font = `${frameFontSize * 1.5}px ${frameFont}`; // pt를 캔버스 기준 px로 보정 (1.5배)
+        ctx.fillStyle = frameTextColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        
+        // 하단 여백의 정중앙 (x=540, y=1481 + 439/2 = 약 1700)
+        ctx.fillText(frameText, 540, 1700);
       }
 
       const finalDataUrl = canvas.toDataURL("image/jpeg", 0.95);

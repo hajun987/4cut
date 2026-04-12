@@ -39,6 +39,12 @@ export default function Home() {
   const [customFrames, setCustomFrames] = useState<{ id: number; name: string; url: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 하단 텍스트 설정 상태
+  const [frameText, setFrameText] = useState("");
+  const [frameFont, setFrameFont] = useState("NexonMaplestory");
+  const [frameFontSize, setFrameFontSize] = useState(60); // pt 단위
+  const [frameTextColor, setFrameTextColor] = useState("#000000");
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
@@ -391,6 +397,10 @@ export default function Home() {
                     if (vidId) setFinalVideoId(vidId); setStep("RESULT");
                   }}
                   videoDuration={intervalSeconds}
+                  frameText={frameText}
+                  frameFont={frameFont}
+                  frameFontSize={frameFontSize}
+                  frameTextColor={frameTextColor}
                 />
               ) : (
                 <button 
@@ -406,16 +416,19 @@ export default function Home() {
           <div className="flex flex-col h-full py-2 lg:py-4 px-1 lg:px-2 relative">
             <button onClick={() => setStep("SELECTION")} className="absolute top-0 right-0 px-3 py-1 bg-zinc-200 text-zinc-700 rounded-lg font-bold text-[10px] lg:text-sm hover:bg-zinc-300 transition-colors">← 사진 다시 선택</button>
             <h2 className="text-xl lg:text-4xl font-black text-zinc-900 mb-4">프레임 선택 🎨</h2>
+            
             <div className="flex lg:hidden bg-zinc-200 p-1.5 rounded-xl mb-4 shadow-inner">
               <button onClick={() => setActiveTab("COLOR")} className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${activeTab === "COLOR" ? "bg-white text-primary shadow-sm" : "text-zinc-500"}`}>심플 컬러</button>
               <button onClick={() => setActiveTab("DESIGN")} className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${activeTab === "DESIGN" ? "bg-white text-primary shadow-sm" : "text-zinc-500"}`}>디자인</button>
             </div>
+
             <div className="flex-1 overflow-x-auto lg:overflow-y-auto hide-scrollbar">
               <div className={`${activeTab === "COLOR" ? "flex" : "hidden md:hidden"} lg:flex gap-4 flex-nowrap lg:flex-wrap`}>
                 {pastelColors.map(c => (
                   <button key={c} onClick={() => setSelectedFrame(c)} className={`w-14 h-14 lg:w-24 lg:h-24 rounded-xl shadow-lg border-2 lg:border-4 flex-shrink-0 transition-transform hover:scale-105 ${selectedFrame === c ? 'border-primary ring-2 ring-primary/20' : 'border-zinc-200 hover:border-zinc-300'}`} style={{ backgroundColor: c }} />
                 ))}
               </div>
+              
               <div className={`${activeTab === "DESIGN" ? "flex" : "hidden md:hidden"} lg:flex gap-4 flex-nowrap lg:flex-wrap mt-2 lg:mt-8`}>
                 <button onClick={() => fileInputRef.current?.click()} className="w-16 lg:w-36 aspect-[1080/1920] rounded-xl border-4 border-dashed border-zinc-300 flex flex-col items-center justify-center gap-2 hover:border-primary hover:text-primary transition-all flex-shrink-0 bg-zinc-50 hover:bg-white group">
                   <span className="text-2xl lg:text-4xl font-black group-hover:scale-110 transition-transform">+</span>
@@ -429,9 +442,73 @@ export default function Home() {
                   </div>
                 ))}
                 {externalFrames.map((url, idx) => (
-                  <button key={idx} onClick={() => setSelectedFrame(url)} className={`w-16 lg:w-36 aspect-[1080/1920] rounded-xl border-2 lg:border-4 flex-shrink-0 overflow-hidden shadow-xl transition-all hover:scale-[1.02] ${selectedFrame === url ? 'border-primary ring-2 ring-primary/20' : 'border-zinc-200'}`}><img crossOrigin="anonymous" src={`${apiUrl}/api/proxy-image?url=${encodeURIComponent(url)}`} className="w-full h-full object-cover" alt="external" /></button>
+                  <button key={idx} onClick={() => setSelectedFrame(url)} className={`w-16 lg:w-36 aspect-[1080/1920] rounded-xl border-2 lg:border-4 flex-shrink-0 overflow-hidden shadow-xl transition-all hover:scale-[1.02] ${selectedFrame === url ? 'border-primary ring-2 ring-primary/20' : 'border-zinc-200'}`}><img crossOrigin="anonymous" src={(url.startsWith("blob:") || url.startsWith("data:") || url.includes("/api/proxy-image")) ? url : url.startsWith("http") ? `${apiUrl}/api/proxy-image?url=${encodeURIComponent(url.split('?')[0])}` : url} className="w-full h-full object-cover" alt="external" /></button>
                 ))}
               </div>
+
+              {/* 컬러 프레임일 경우 텍스트 설정 UI 추가 */}
+              {selectedFrame.startsWith("#") && (
+                <div className="mt-6 lg:mt-10 p-4 lg:p-6 bg-white rounded-2xl border-2 border-zinc-100 shadow-sm space-y-4 lg:space-y-6">
+                  <h3 className="text-sm lg:text-lg font-bold text-zinc-800 flex items-center gap-2">✍️ 하단 문구 삽입</h3>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                       <label className="text-[10px] lg:text-xs font-black text-zinc-400 uppercase">내용</label>
+                       <input 
+                         type="text" 
+                         value={frameText} 
+                         onChange={(e) => setFrameText(e.target.value)}
+                         placeholder="여기에 문구를 입력하세요"
+                         className="w-full bg-zinc-50 border-2 border-zinc-100 p-3 rounded-xl text-sm outline-none focus:border-primary transition-colors"
+                       />
+                    </div>
+                    
+                    <div className="space-y-2">
+                       <label className="text-[10px] lg:text-xs font-black text-zinc-400 uppercase">폰트</label>
+                       <select 
+                         value={frameFont} 
+                         onChange={(e) => setFrameFont(e.target.value)}
+                         className="w-full bg-zinc-50 border-2 border-zinc-100 p-3 rounded-xl text-sm outline-none focus:border-primary transition-colors"
+                       >
+                         <option value="NexonMaplestory">넥슨 메이플스토리</option>
+                         <option value="ChangwonDanggamAsak">창원단감아삭</option>
+                         <option value="SchoolSafetyNotification">학교안심 알림장</option>
+                       </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                       <label className="text-[10px] lg:text-xs font-black text-zinc-400 uppercase">크기 ({frameFontSize}pt)</label>
+                       <input 
+                         type="range" 
+                         min="20" max="150" 
+                         value={frameFontSize} 
+                         onChange={(e) => setFrameFontSize(Number(e.target.value))}
+                         className="w-full accent-primary"
+                       />
+                    </div>
+                    
+                    <div className="space-y-2">
+                       <label className="text-[10px] lg:text-xs font-black text-zinc-400 uppercase block">색상</label>
+                       <div className="flex gap-3">
+                         <button 
+                           onClick={() => setFrameTextColor("#000000")}
+                           className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border-2 ${frameTextColor === "#000000" ? 'bg-black text-white border-black' : 'bg-white text-black border-zinc-200'}`}
+                         >
+                           검정색
+                         </button>
+                         <button 
+                           onClick={() => setFrameTextColor("#FFFFFF")}
+                           className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border-2 ${frameTextColor === "#FFFFFF" ? 'bg-zinc-100 text-black border-zinc-300' : 'bg-white text-zinc-400 border-zinc-200'}`}
+                         >
+                           흰색
+                         </button>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="mt-4 flex lg:hidden justify-center items-center">
               <CanvasRenderer 
@@ -442,6 +519,10 @@ export default function Home() {
                   if (vidId) setFinalVideoId(vidId); setStep("RESULT");
                 }}
                 videoDuration={intervalSeconds}
+                frameText={frameText}
+                frameFont={frameFont}
+                frameFontSize={frameFontSize}
+                frameTextColor={frameTextColor}
               />
             </div>
           </div>
