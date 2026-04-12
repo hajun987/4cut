@@ -171,6 +171,9 @@ export default function CanvasRenderer({ selectedSlots, selectedIndices, selecte
           }
         } catch (e) {
           console.error("브라우저 비디오 렌더링 실패:", e);
+          // 비디오가 실패해도 이미지는 살려두기 위해 여기서 중단만 함
+          setLoadingText("앗! 영상 합성 중 오류가 발생하여 이미지만 생성합니다.");
+          await new Promise(res => setTimeout(res, 2000));
         }
       }
        setLoadingText("완료되었습니다!");
