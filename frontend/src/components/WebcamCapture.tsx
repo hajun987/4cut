@@ -37,7 +37,7 @@ export default function WebcamCapture({
   });
 
   useEffect(() => {
-    let rc = 10;
+    let rc = initialReadySeconds !== undefined ? initialReadySeconds : 10;
     let timerId: NodeJS.Timeout | null = null;
     let isMounted = true;
 

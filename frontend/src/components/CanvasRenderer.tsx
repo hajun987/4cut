@@ -77,11 +77,14 @@ export default function CanvasRenderer({ selectedSlots, selectedIndices, selecte
         ctx.rect(551, 790, 465, 691);
         ctx.fill('evenodd');
       } else {
-        // 3. 외부 디자인 프레임(PNG) - CORS 방지를 위해 백엔드 프록시 사용
+        // 3. 외부 디자인 프레임(PNG) - 로컬(blob)은 직접 로드, 원격은 프록시 사용
         try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-          const proxyUrl = `${apiUrl}/api/proxy-image?url=${encodeURIComponent(selectedFrame)}`;
-          const frameImg = await loadImage(proxyUrl);
+          let frameUrl = selectedFrame;
+          if (!selectedFrame.startsWith("blob:") && !selectedFrame.startsWith("data:")) {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+            frameUrl = `${apiUrl}/api/proxy-image?url=${encodeURIComponent(selectedFrame)}`;
+          }
+          const frameImg = await loadImage(frameUrl);
           ctx.drawImage(frameImg, 0, 0, 1080, 1920);
         } catch (e) {
           console.warn("오버레이 프레임 렌더링 실패.", e);
