@@ -103,7 +103,19 @@ export default function Home() {
         const framesRes = await fetch(`${apiUrl}/api/frames-list`);
         if (framesRes.ok) {
           const framesData = await framesRes.json();
-          if (Array.isArray(framesData)) setExternalFrames(framesData);
+          if (Array.isArray(framesData)) {
+            // 비밀 코드가 할당된 모든 URL 수집
+            const secretUrls = new Set(Object.values(secretMap).map((data: any) => data.url));
+            
+            // 필터링: 비밀 프레임이 아니거나, 현재 접속 코드로 허용된 프레임인 경우만 노출
+            const filteredFrames = framesData.filter((url: string) => {
+              if (!secretUrls.has(url)) return true; // 일반 프레임
+              if (code && secretMap[code] && secretMap[code].url === url) return true; // 현재 코드로 해금된 프레임
+              return false; // 다른 코드용 비밀 프레임은 숨김
+            });
+
+            setExternalFrames(filteredFrames);
+          }
         }
       } catch (e) {
         console.error("초기 데이터 로드 실패", e);
