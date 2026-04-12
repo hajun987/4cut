@@ -303,6 +303,18 @@ export default function Home() {
             {selectedFrame.startsWith("#") ? (
               <svg width="100%" height="100%" viewBox="0 0 1080 1920" className="absolute inset-0 pointer-events-none z-10">
                 <path fill={selectedFrame} fillRule="evenodd" d="M 0 0 H 1080 V 1920 H 0 Z M 65 78 H 528 V 767 H 65 Z M 552 78 H 1015 V 767 H 552 Z M 65 791 H 528 V 1480 H 65 Z M 552 791 H 1015 V 1480 H 552 Z" />
+                {frameText && (
+                  <text 
+                    x="540" 
+                    y="1700" 
+                    textAnchor="middle" 
+                    dominantBaseline="middle" 
+                    fill={frameTextColor} 
+                    style={{ fontFamily: frameFont, fontSize: `${frameFontSize * 1.5}px`, fontWeight: '700' }}
+                  >
+                    {frameText}
+                  </text>
+                )}
               </svg>
             ) : (
               <img 

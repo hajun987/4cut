@@ -103,7 +103,8 @@ export default function CanvasRenderer({
         // 폰트가 로드될 때까지 기다림 (브라우저 캐시 활용)
         await document.fonts.ready;
         
-        ctx.font = `${frameFontSize * 1.5}px ${frameFont}`; // pt를 캔버스 기준 px로 보정 (1.5배)
+        const fontSizePx = frameFontSize * 1.5;
+        ctx.font = `bold ${fontSizePx}px ${frameFont}, sans-serif`;
         ctx.fillStyle = frameTextColor;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
