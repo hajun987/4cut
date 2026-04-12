@@ -54,11 +54,14 @@ export default function CanvasRenderer({ selectedSlots, selectedIndices, selecte
 
       // 1. 사진 4장을 그림
       for (let i = 0; i < 4; i++) {
-          try {
-            const img = await loadImage(selectedSlots[i]);
-            ctx.drawImage(img, coordinates[i].x, coordinates[i].y, coordinates[i].w, coordinates[i].h);
-          } catch {
-            console.error("Image load fail");
+          const slot = selectedSlots[i];
+          if (slot) {
+            try {
+              const img = await loadImage(slot);
+              ctx.drawImage(img, coordinates[i].x, coordinates[i].y, coordinates[i].w, coordinates[i].h);
+            } catch {
+              console.error("Image load fail");
+            }
           }
       }
 

@@ -157,7 +157,6 @@ export default function Home() {
   ];
 
   return (
-  return (
     <div className="w-full min-h-screen flex flex-col lg:flex-row relative bg-white text-zinc-900 border-t-8 border-primary overflow-x-hidden lg:overflow-visible font-sans">
       
       {/* 1. Top Preview Area */}
@@ -225,8 +224,7 @@ export default function Home() {
                             newIndices[slotIndex] = null;
                             setSelectedSlots(newSlots);
                             setSelectedIndices(newIndices);
-                          }
-                        } else {
+                          } else {
                           const firstEmptyIndex = selectedSlots.findIndex(slot => slot === null);
                           if (firstEmptyIndex !== -1) {
                             const newSlots = [...selectedSlots];
