@@ -202,62 +202,8 @@ export default function AdminPage() {
           </a>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          
-          <section className="bg-white p-8 rounded-3xl shadow-sm border border-zinc-200 h-fit">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">⏱️ 촬영 환경 설정</h2>
-            <div className="flex flex-col gap-6">
-              
-              <div>
-                <label className="text-sm font-bold text-zinc-600 mb-2 block">최초 촬영 준비 대기시간</label>
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="number" min={0} max={30}
-                    value={readySeconds}
-                    onChange={(e) => setReadySeconds(Number(e.target.value))}
-                    className="border-2 border-zinc-200 p-3 rounded-xl w-24 text-lg font-bold outline-none focus:border-primary transition-colors"
-                  />
-                  <span className="text-lg font-bold">초 (Sec)</span>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-zinc-100">
-                <label className="text-sm font-bold text-zinc-600 mb-2 block">컷당 촬영 대기시간</label>
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="number" min={1} max={30}
-                    value={intervalSeconds}
-                    onChange={(e) => setIntervalSeconds(Number(e.target.value))}
-                    className="border-2 border-zinc-200 p-3 rounded-xl w-24 text-lg font-bold outline-none focus:border-primary"
-                  />
-                  <span className="text-lg font-bold">초 (Sec)</span>
-                </div>
-              </div>
-              
-              <div className="pt-2 border-t border-zinc-100">
-                <label className="text-sm font-bold text-zinc-600 mb-2 block">지정 총 촬영 낱장 수 (보통 6~8)</label>
-                <div className="flex items-center gap-3">
-                  <input 
-                    type="number" min={4} max={10}
-                    value={maxShots}
-                    onChange={(e) => setMaxShots(Number(e.target.value))}
-                    className="border-2 border-zinc-200 p-3 rounded-xl w-24 text-lg font-bold outline-none focus:border-primary"
-                  />
-                  <span className="text-lg font-bold">장 (Shots)</span>
-                </div>
-              </div>
-
-              <button 
-                onClick={handleSaveConfig}
-                disabled={isSaving}
-                className="mt-6 w-full py-4 bg-zinc-900 text-white font-bold text-lg rounded-xl hover:bg-black transition-colors"
-               >
-                {isSaving ? "저장 중..." : "설정 적용하기"}
-              </button>
-            </div>
-          </section>
-
-          <section className="bg-white p-8 rounded-3xl shadow-sm border border-zinc-200 md:col-span-2">
+        <div className="w-full">
+          <section className="bg-white p-8 rounded-3xl shadow-sm border border-zinc-200">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold flex items-center gap-2">🖼️ 내장 프레임 관리</h2>
               
