@@ -23,6 +23,7 @@ export default function WebcamCapture({
   
   const [countdown, setCountdown] = useState<number | null>(null);
   const [showFlash, setShowFlash] = useState(false);
+  const [freezeImage, setFreezeImage] = useState<string | null>(null);
   const [maxShots, setMaxShots] = useState(initialMaxShots || 6);
   const [intervalSeconds, setIntervalSeconds] = useState(initialIntervalSeconds || 6);
   const [readySeconds, setReadySeconds] = useState(initialReadySeconds || 10);
@@ -200,18 +201,20 @@ export default function WebcamCapture({
       // 2. 사운드가 출력될 수 있는 아주 짧은 여유시간 (80ms) 부여
       await new Promise(res => setTimeout(res, 80));
 
-      // 3. 플래시 터뜨림과 동시에 캡처
+      // 3. 플래시 터뜨림과 동시에 캡처 및 정지화면 표시
       setShowFlash(true);
       const photoDataUrl = takePhotoAndCrop();
-      
-      // 4. 플래시는 200ms 뒤에 꺼지도록
-      setTimeout(() => setShowFlash(false), 200);
-
       if (photoDataUrl) {
+         setFreezeImage(photoDataUrl); // 정지 화면 설정
          onCapture(photoDataUrl, videoBlob);
       } else {
          console.error(`[Rec] Shot ${i+1}: takePhotoAndCrop returned undefined!`);
       }
+      
+      // 4. 플래시는 200ms 뒤에 꺼지지만, 정지 화면은 800ms 유지하여 확인 피드백 제공
+      setTimeout(() => setShowFlash(false), 200);
+      await new Promise(res => setTimeout(res, 800));
+      setFreezeImage(null); // 정지 화면 해제 및 카메라 복귀
 
       currentCount++;
       setShotCount(currentCount);
@@ -253,6 +256,13 @@ export default function WebcamCapture({
               muted 
               className="w-full h-full object-cover transform -scale-x-100" 
             />
+            {freezeImage && (
+              <img 
+                src={freezeImage} 
+                className="absolute inset-0 w-full h-full object-cover z-25 animate-in fade-in duration-100" 
+                alt="Captured Freeze"
+              />
+            )}
             {countdown !== null && (
               <div className="absolute top-[20%] w-full flex items-center justify-center transition-none z-20">
                 <span className="text-6xl lg:text-[8.4rem] font-black text-white select-none drop-shadow-2xl" style={{ textShadow: '4px 4px 0 #FF4785, -2px -2px 0 #FF4785, 2px -2px 0 #FF4785, -2px 2px 0 #FF4785, 2px 2px 0 #FF4785' }}>
