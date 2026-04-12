@@ -80,7 +80,7 @@ export default function CanvasRenderer({ selectedSlots, selectedIndices, selecte
         // 3. 외부 디자인 프레임(PNG) - 로컬(blob)은 직접 로드, 원격은 프록시 사용
         try {
           let frameUrl = selectedFrame;
-          if (!selectedFrame.startsWith("blob:") && !selectedFrame.startsWith("data:")) {
+          if (!selectedFrame.startsWith("blob:") && !selectedFrame.startsWith("data:") && !selectedFrame.includes("/api/proxy-image")) {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
             frameUrl = `${apiUrl}/api/proxy-image?url=${encodeURIComponent(selectedFrame)}`;
           }

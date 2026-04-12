@@ -110,9 +110,22 @@ export default function AdminPage() {
   const handleDeleteFrame = async (frameUrl: string) => {
     if (!confirm("정말 이 프레임을 삭제하시겠습니까?")) return;
     try {
-      // 프레임 파일명 추출 (URL의 마지막 부분 파싱 후 decode)
-      const filename = decodeURIComponent(frameUrl.split('/').pop() || "");
-      if(!filename) return;
+      let filename = "";
+      
+      if (frameUrl.includes("key=")) {
+        // 새로운 키 기반 프록시 URL 대응
+        const urlParams = new URLSearchParams(frameUrl.split('?')[1]);
+        const key = urlParams.get("key") || "";
+        filename = key.split('/').pop() || "";
+      } else {
+        // 기존 URL 대응 (폴백)
+        filename = decodeURIComponent(frameUrl.split('/').pop() || "");
+      }
+
+      if(!filename) {
+        alert("파일명 추출 실패");
+        return;
+      }
 
       await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/frame-external/${encodeURIComponent(filename)}`, {
         method: "DELETE"

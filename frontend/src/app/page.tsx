@@ -289,7 +289,13 @@ export default function Home() {
             ) : (
               <img 
                 crossOrigin="anonymous" 
-                src={selectedFrame.startsWith("http") ? `${apiUrl}/api/proxy-image?url=${encodeURIComponent(selectedFrame.split('?')[0])}` : selectedFrame} 
+                src={
+                  (selectedFrame.startsWith("blob:") || selectedFrame.startsWith("data:") || selectedFrame.includes("/api/proxy-image"))
+                    ? selectedFrame 
+                    : selectedFrame.startsWith("http") 
+                      ? `${apiUrl}/api/proxy-image?url=${encodeURIComponent(selectedFrame.split('?')[0])}` 
+                      : selectedFrame
+                } 
                 className="absolute inset-0 w-full h-full object-cover pointer-events-none z-10" 
                 alt="frame"
               />

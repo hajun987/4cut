@@ -300,15 +300,26 @@ app.post("/api/config", async (req, res) => {
  */
 app.get("/api/proxy-image", async (req, res) => {
   const imageUrl = req.query.url;
-  if (!imageUrl) return res.status(400).send("URL이 필요합니다.");
+  const imageKey = req.query.key; // 직접 키로 접근 지원
+  
+  if (!imageUrl && !imageKey) return res.status(400).send("URL 또는 Key가 필요합니다.");
 
   try {
-    // R2 내부 키인지 확인 (퍼블릭 URL을 키로 변환)
-    if (imageUrl.includes(R2_PUBLIC_URL)) {
-      const key = imageUrl.replace(`${R2_PUBLIC_URL}/`, "").split("?")[0];
+    let key = imageKey;
+    
+    // URL이 주어졌을 때 R2 주소인지 판별하여 키 추출 로직 강화
+    if (imageUrl && !key) {
+      const cleanPublicUrl = (R2_PUBLIC_URL || "").replace(/\/$/, "");
+      if (imageUrl.includes(cleanPublicUrl)) {
+        key = decodeURIComponent(imageUrl.replace(`${cleanPublicUrl}/`, "").split("?")[0]);
+      }
+    }
+
+    if (key) {
+      // R2에서 직접 가져오기 (Private 버킷 대응)
       const command = new GetObjectCommand({
         Bucket: R2_BUCKET_NAME,
-        Key: decodeURIComponent(key),
+        Key: key,
       });
       const response = await s3Client.send(command);
       res.setHeader("Content-Type", response.ContentType || "image/png");
@@ -471,8 +482,8 @@ app.get("/api/frames-list", async (req, res) => {
     const urls = Contents
       .filter(obj => obj.Key.toLowerCase().endsWith(".png") || obj.Key.toLowerCase().endsWith(".jpg"))
       .map(obj => {
-         const directUrl = `${R2_PUBLIC_URL}/${encodeURIComponent(obj.Key)}`;
-         return `${currentBase}/api/proxy-image?url=${encodeURIComponent(directUrl)}`;
+         // 중복 프록시 문제를 막으면서도 프라이빗 접근을 보장하기 위해 key 기반 프록시 주소 반환
+         return `${currentBase}/api/proxy-image?key=${encodeURIComponent(obj.Key)}`;
       });
       
     res.json(urls);
@@ -506,12 +517,27 @@ app.post("/api/frame-external", uploadFrameExternal.single("frame"), async (req,
   }
 });
 
-app.delete("/api/frame-external/:name", (req, res) => {
+app.delete("/api/frame-external/:name", async (req, res) => {
   const filename = req.params.name;
+  
+  // 1. 로컬 파일 삭제 (폴백용/임시용)
   const targetPath = path.join(externalFrameDir, filename);
   if (fs.existsSync(targetPath)) {
     fs.unlinkSync(targetPath);
   }
+
+  // 2. R2 스토리지에서 영구 삭제 (frames/ 접두어 포함)
+  try {
+    const deleteCommand = new DeleteObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: `frames/${filename}`
+    });
+    await s3Client.send(deleteCommand);
+    console.log(`[R2] Frame deleted: frames/${filename}`);
+  } catch (err) {
+    console.error("[R2 Delete Error]", err);
+  }
+
   res.json({ success: true });
 });
 
