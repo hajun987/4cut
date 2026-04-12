@@ -160,7 +160,7 @@ export default function Home() {
   return (
     <div className="w-full min-h-screen flex flex-col lg:flex-row relative bg-white text-zinc-900 border-t-8 border-primary overflow-x-hidden lg:overflow-visible font-sans">
       
-      {/* 1. 상단 프리뷰 영역 (데스크탑에서 전체 화면을 꽉 채우도록 설정) */}
+      {/* 1. Top Preview Area */}
       <section className="h-[55dvh] lg:h-screen lg:min-h-screen lg:flex-[1.2] flex flex-col items-center justify-center p-4 lg:p-12 bg-zinc-100 relative border-b lg:border-b-0 lg:border-l border-zinc-200 order-1 lg:order-2 overflow-hidden">
         <div className="w-full h-full max-h-[100%] flex items-center justify-center mb-0 lg:mb-8 perspective">
           <div className="h-full aspect-[1080/1920] relative rounded-lg bg-zinc-200/50 shadow-[0_15px_40px_rgba(0,0,0,0.15)] overflow-hidden transition-transform duration-500 transform lg:hover:scale-[1.02]">
@@ -195,7 +195,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 2. 하단 리스트/컨트롤 영역 (데스크탑에서 전체 화면을 꽉 채우도록 설정) */}
+      {/* 2. Bottom Control Area */}
       <section className="h-[45dvh] lg:h-screen lg:min-h-screen lg:flex-1 flex flex-col p-4 lg:p-12 justify-center bg-zinc-50 border-t lg:border-t-0 lg:border-r border-zinc-200 z-20 order-2 lg:order-1 relative overflow-y-auto">
         {step === "SELECTION" ? (
           <>

@@ -31,7 +31,7 @@ export default function ResultQR({ url, imagePreview, imageId, videoId }: Result
     <div className="min-h-screen bg-zinc-950 p-4 lg:p-12 flex items-center justify-center overflow-x-hidden">
       <div className="max-w-6xl w-full mx-auto flex flex-col lg:flex-row gap-8 lg:gap-20 items-center justify-center">
         
-        {/* 완성된 사진 프리뷰 (모바일 최소 높이 강제 확보) */}
+        {/* Result Preview */}
         {imagePreview && (
           <div className="flex-[2] lg:flex-1 flex justify-center w-full min-h-[50dvh] lg:h-screen items-center">
             <img 
@@ -43,7 +43,7 @@ export default function ResultQR({ url, imagePreview, imageId, videoId }: Result
           </div>
         )}
 
-        {/* QR 코드 및 버튼 영역 */}
+        {/* QR and Buttons */}
         <div className="flex-1 lg:flex-1 flex flex-col items-center text-center w-full border-t lg:border-t-0 border-white/10 pt-8 lg:pt-0">
           <h2 className="text-2xl lg:text-4xl font-black text-white mb-6 lg:mb-10 leading-tight tracking-tight">
             네컷사진 완성!<br className="hidden lg:block" />
@@ -59,7 +59,7 @@ export default function ResultQR({ url, imagePreview, imageId, videoId }: Result
             <span className="text-[10px] lg:text-xs opacity-50 mt-1 block">(서버에서 24시간 후 자동 삭제됩니다)</span>
           </p>
 
-          {/* 다운로드 버튼 영역 */}
+          {/* Download Buttons */}
           <div className="flex flex-col gap-3 w-full max-w-xs lg:max-w-sm mb-8 px-4">
             {imageId && (
               <button 
