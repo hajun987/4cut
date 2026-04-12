@@ -180,7 +180,7 @@ export default function Home() {
         </div>
 
         <div className="hidden lg:flex w-full items-center justify-center">
-            {step !== "SELECTION" && (
+            {(step === "FRAME_SELECTION" || (step === "SELECTION" && secretCode && secretFrameMap[secretCode])) && (
               <CanvasRenderer 
                 selectedSlots={selectedSlots} 
                 selectedIndices={selectedIndices}
@@ -188,7 +188,6 @@ export default function Home() {
                 shotImages={shots}
                 shotVideos={shotVideos}
                 onUploaded={(url, id, vidId, localUrl) => {
-                  // localUrl(베이스64)을 우선적으로 미리보기에 사용하여 엑박 방지
                   setFinalQrUrl(localUrl || url); 
                   setFinalImageId(id);
                   if (vidId) setFinalVideoId(vidId);
@@ -254,18 +253,30 @@ export default function Home() {
               })}
             </div>
 
-            {/* 사진 선택 완료 버튼 (모바일용 소형 버튼) */}
             <div className="mt-2 flex justify-center">
-              <button 
-                onClick={() => {
-                  if (secretCode && secretFrameMap[secretCode]) setStep("RESULT");
-                  else setStep("FRAME_SELECTION");
-                }}
-                disabled={selectedSlots.filter(s => s !== null).length < 4}
-                className="px-8 py-2.5 bg-primary text-white text-sm lg:text-2xl font-black rounded-full shadow-lg hover:scale-105 active:scale-95 disabled:opacity-50"
-              >
-                프레임 고르기 🎨
-              </button>
+              {secretCode && secretFrameMap[secretCode] ? (
+                <CanvasRenderer 
+                  selectedSlots={selectedSlots} 
+                  selectedIndices={selectedIndices}
+                  selectedFrame={selectedFrame}
+                  shotImages={shots}
+                  shotVideos={shotVideos}
+                  onUploaded={(url, id, vidId, localUrl) => {
+                    setFinalQrUrl(localUrl || url); 
+                    setFinalImageId(id);
+                    if (vidId) setFinalVideoId(vidId);
+                    setStep("RESULT");
+                  }}
+                />
+              ) : (
+                <button 
+                  onClick={() => setStep("FRAME_SELECTION")}
+                  disabled={selectedSlots.filter(s => s !== null).length < 4}
+                  className="px-8 py-2.5 bg-primary text-white text-sm lg:text-2xl font-black rounded-full shadow-lg hover:scale-105 active:scale-95 disabled:opacity-50"
+                >
+                  프레임 고르기 🎨
+                </button>
+              )}
             </div>
           </>
         ) : step === "FRAME_SELECTION" ? (
