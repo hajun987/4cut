@@ -9,9 +9,10 @@ interface CanvasRendererProps {
   shotImages: string[];
   shotVideos: (Blob | null)[];
   onUploaded: (serverResultUrl: string, finalImageId: string, videoId?: string, localPreviewUrl?: string) => void;
+  videoDuration?: number;
 }
 
-export default function CanvasRenderer({ selectedSlots, selectedIndices, selectedFrame, shotImages, shotVideos, onUploaded }: CanvasRendererProps) {
+export default function CanvasRenderer({ selectedSlots, selectedIndices, selectedFrame, shotImages, shotVideos, onUploaded, videoDuration = 4 }: CanvasRendererProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [loadingText, setLoadingText] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -149,7 +150,7 @@ export default function CanvasRenderer({ selectedSlots, selectedIndices, selecte
             
             if (!ffmpeg) throw new Error("FFmpeg 엔진이 로드되지 않았습니다.");
             
-            const mp4Data = await composeVideoOnClient(ffmpeg, videoBlobs, selectedFrame);
+            const mp4Data = await composeVideoOnClient(ffmpeg, videoBlobs, selectedFrame, videoDuration);
             const mp4Blob = new Blob([mp4Data as any], { type: 'video/mp4' });
 
             // 3. 서버에는 이제 완성된 MP4 하나만 전송

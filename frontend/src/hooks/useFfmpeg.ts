@@ -4,7 +4,8 @@ import { fetchFile } from "@ffmpeg/util";
 export const composeVideoOnClient = async (
   ffmpeg: FFmpeg,
   videoBlobs: Blob[],
-  frameUrlOrColor: string
+  frameUrlOrColor: string,
+  duration: number = 4
 ): Promise<Uint8Array> => {
   if (!ffmpeg.loaded) return new Uint8Array();
 
@@ -39,7 +40,7 @@ export const composeVideoOnClient = async (
   
   if (decodedFrame.startsWith("#")) {
     const hex = decodedFrame.replace("#", "0x");
-    filterComplex = `color=c=${hex}:s=1080x1920:d=4 [bg];`;
+    filterComplex = `color=c=${hex}:s=1080x1920:d=${duration} [bg];`;
     filterComplex += `[0:v]${cropFilter} [v1];`;
     filterComplex += `[1:v]${cropFilter} [v2];`;
     filterComplex += `[2:v]${cropFilter} [v3];`;
@@ -69,7 +70,7 @@ export const composeVideoOnClient = async (
       console.warn("[FFmpeg] 프레임 로드 실패, 기본 배경으로 대체:", e);
     }
 
-    filterComplex = `color=c=white:s=1080x1920:d=4 [base];`;
+    filterComplex = `color=c=white:s=1080x1920:d=${duration} [base];`;
     filterComplex += `[0:v]${cropFilter} [v1];`;
     filterComplex += `[1:v]${cropFilter} [v2];`;
     filterComplex += `[2:v]${cropFilter} [v3];`;
@@ -103,7 +104,7 @@ export const composeVideoOnClient = async (
     "-map", "[out]",
     "-c:v", "libx264",
     "-pix_fmt", "yuv420p",
-    "-t", "4",
+    "-t", duration.toString(),
     "-preset", "ultrafast",
     "-movflags", "+faststart", // 웹 재생 최적화 (moov atom을 앞으로)
     "-avoid_negative_ts", "make_zero",

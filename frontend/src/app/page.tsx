@@ -259,6 +259,7 @@ export default function Home() {
                   if (vidId) setFinalVideoId(vidId);
                   setStep("RESULT");
                 }}
+                videoDuration={intervalSeconds}
              />
             )}
         </div>
@@ -333,6 +334,7 @@ export default function Home() {
                     if (vidId) setFinalVideoId(vidId);
                     setStep("RESULT");
                   }}
+                  videoDuration={intervalSeconds}
                 />
               ) : (
                 <button 
@@ -397,6 +399,7 @@ export default function Home() {
                   if (vidId) setFinalVideoId(vidId);
                   setStep("RESULT");
                 }}
+                videoDuration={intervalSeconds}
               />
             </div>
           </div>
