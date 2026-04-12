@@ -352,7 +352,7 @@ app.post("/api/save-result", uploadResult.single("image"), async (req, res) => {
 });
 
 // 강제 다운로드 엔드포인트 (Content-Disposition 헤더로 파일명 강제 지정)
-app.get("/api/download/:filename", (req, res) => {
+app.get("/api/download/:filename", async (req, res) => {
   const filename = req.params.filename;
   if (!filename) return res.status(400).json({ error: "Missing filename" });
 
