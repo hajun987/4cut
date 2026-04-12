@@ -50,22 +50,25 @@ export const composeVideoOnClient = async (
     filterComplex += `[o2][v3]overlay=63:789[o3];`;
     filterComplex += `[o3][v4]overlay=550:789[out]`;
   } else {
-    // 이미지 프레임일 때 - R2 CORS 이슈 방지를 위해 프록시 주소 활용
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-    const proxyUrl = `${apiUrl}/api/proxy-image?url=${encodeURIComponent(decodedFrame)}`;
-    
+    // 이미지 프레임일 때
     try {
-      console.log(`[FFmpeg] 프레임 로드 시도: ${proxyUrl}`);
-      // fetch를 먼저 수행하여 상태 코드 확인
-      const resp = await fetch(proxyUrl);
-      if (!resp.ok) throw new Error(`Proxy error: ${resp.status}`);
+      let frameData: Uint8Array;
       
-      const frameData = await fetchFile(proxyUrl);
-      if (frameData.length > 500) { // 최소 크기 상향 (에러 페이지 방지)
-        await ffmpeg.writeFile("frame.png", frameData);
-        hasFrame = true;
-        console.log(`[FFmpeg] frame.png 쓰기 완료 (${frameData.length} bytes)`);
+      // 로컬 Blob URL인 경우 직접 fetch, 원격 URL인 경우 프록시 사용
+      if (decodedFrame.startsWith("blob:") || decodedFrame.startsWith("data:")) {
+        console.log(`[FFmpeg] 로컬 프레임 로드: ${decodedFrame}`);
+        frameData = await fetchFile(decodedFrame);
+      } else {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+        const proxyUrl = `${apiUrl}/api/proxy-image?url=${encodeURIComponent(decodedFrame)}`;
+        console.log(`[FFmpeg] 원격 프레임 로드(프록시): ${proxyUrl}`);
+        frameData = await fetchFile(proxyUrl);
       }
+
+      if (frameData.length === 0) throw new Error("프레임 데이터가 비어있습니다.");
+      await ffmpeg.writeFile("frame.png", frameData);
+      hasFrame = true;
+      console.log(`[FFmpeg] frame.png 쓰기 완료 (${frameData.length} bytes)`);
     } catch (e) {
       console.warn("[FFmpeg] 프레임 로드 실패, 기본 배경으로 대체:", e);
     }

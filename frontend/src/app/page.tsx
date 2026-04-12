@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import WebcamCapture from "@/components/WebcamCapture";
 import PhotoSelector from "@/components/PhotoSelector";
 import CanvasRenderer from "@/components/CanvasRenderer";
 import ResultQR from "@/components/ResultQR";
+import { getAllFrames, saveFrame, deleteFrame } from "@/utils/indexedDb";
 
 export default function Home() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -33,6 +34,10 @@ export default function Home() {
   const [intervalSeconds, setIntervalSeconds] = useState(6);
   const [maxShots, setMaxShots] = useState(6);
   const [showSettings, setShowSettings] = useState(false);
+
+  // 나만의 프레임 상태
+  const [customFrames, setCustomFrames] = useState<{ id: number; name: string; url: string }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -83,28 +88,34 @@ export default function Home() {
     }
 
     async function loadInitialData() {
-      // ... (기존 데이터 로딩 로직)
       try {
-        const configRes = await fetch(`${apiUrl}/api/config`);
-        const configData = await configRes.json();
-        const secretMap = configData.secretFrames || {};
-        setSecretFrameMap(secretMap);
-        const getFilename = (url: string) => url.split('/').pop() || "";
-        if (code && secretMap[code]) setSelectedFrame(secretMap[code].trim());
-        const framesRes = await fetch(`${apiUrl}/api/frames-list`);
-        const allFrames = await framesRes.json();
-        if (Array.isArray(allFrames)) {
-          const secretFilenames = Object.values(secretMap).map((url: any) => getFilename(url.trim()));
-          const filtered = allFrames.filter(url => !secretFilenames.includes(getFilename(url.trim())));
-          setExternalFrames(filtered);
-        }
-      } catch (err) {
-        console.error("데이터 로드 오류:", err);
+        const res = await fetch(`${apiUrl}/api/config`);
+        const data = await res.json();
+        if (data.frames) setExternalFrames(data.frames);
+        if (data.secretFrames) setSecretFrameMap(data.secretFrames);
+        if (code && data.secretFrames && data.secretFrames[code]) setSelectedFrame(data.secretFrames[code].trim());
+      } catch (e) {
+        console.error("초기 데이터 로드 실패", e);
+      }
+    }
+
+    async function loadCustomFrames() {
+      try {
+        const frames = await getAllFrames();
+        const framesWithUrls = frames.map(f => ({
+          id: f.id,
+          name: f.name,
+          url: URL.createObjectURL(f.blob)
+        }));
+        setCustomFrames(framesWithUrls);
+      } catch (e) {
+        console.error("커스텀 프레임 로드 실패", e);
       }
     }
 
     loadEngine();
     loadInitialData();
+    loadCustomFrames();
   }, []);
 
   // 설정값이 바뀔 때마다 URL 동기화
@@ -118,6 +129,49 @@ export default function Home() {
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.replaceState({}, "", newUrl);
   }, [readySeconds, intervalSeconds, maxShots]);
+
+  // 커스텀 프레임 업로드 핸들러
+  const handleCustomFrameUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 1. 용량 제한 체크 (2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      alert("파일 크기는 2MB 이하여야 합니다.");
+      return;
+    }
+
+    try {
+      const id = await saveFrame(file.name, file);
+      const url = URL.createObjectURL(file);
+      setCustomFrames(prev => [...prev, { id, name: file.name, url }]);
+      setSelectedFrame(url); // 업로드 후 바로 선택
+    } catch (err) {
+      console.error("프레임 저장 실패", err);
+      alert("프레임 저장 중 오류가 발생했습니다.");
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleCustomFrameDelete = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation(); // 버튼 클릭 이벤트 전파 차단
+    if (!confirm("이 프레임을 삭제하시겠습니까?")) return;
+
+    try {
+      await deleteFrame(id);
+      setCustomFrames(prev => {
+        const target = prev.find(f => f.id === id);
+        if (target) URL.revokeObjectURL(target.url);
+        return prev.filter(f => f.id !== id);
+      });
+      if (selectedFrame.startsWith("blob:")) {
+        setSelectedFrame("#FFFFFF"); // 삭제된 프레임을 사용 중이었다면 초기화
+      }
+    } catch (err) {
+      console.error("프레임 삭제 실패", err);
+    }
+  };
 
   if (step === "HOME") {
     return (
@@ -369,6 +423,41 @@ export default function Home() {
                 ))}
               </div>
               <div className={`${activeTab === "DESIGN" ? "flex" : "hidden md:hidden"} lg:flex gap-3 mt-0 lg:mt-6`}>
+                {/* 1. 나만의 프레임 추가 버튼 */}
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-16 lg:w-32 aspect-[1080/1920] rounded-md lg:rounded-xl border-2 lg:border-4 border-dashed border-zinc-300 flex flex-col items-center justify-center gap-1 hover:border-primary hover:text-primary transition-all flex-shrink-0 bg-zinc-50/50"
+                >
+                  <span className="text-xl lg:text-3xl font-black">+</span>
+                  <span className="text-[8px] lg:text-xs font-bold leading-tight">나만의<br/>프레임</span>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    accept="image/*" 
+                    onChange={handleCustomFrameUpload} 
+                  />
+                </button>
+
+                {/* 2. 등록된 나만의 프레임 목록 */}
+                {customFrames.slice().reverse().map((f) => (
+                  <div key={f.id} className="relative flex-shrink-0">
+                    <button 
+                      onClick={() => setSelectedFrame(f.url)} 
+                      className={`w-16 lg:w-32 aspect-[1080/1920] rounded-md lg:rounded-xl shadow-md border-2 lg:border-4 overflow-hidden transition-all ${selectedFrame === f.url ? 'border-primary ring-2 ring-primary/20' : 'border-zinc-200'}`}
+                    >
+                      <img src={f.url} className="w-full h-full object-cover" alt={f.name} />
+                    </button>
+                    <button 
+                      onClick={(e) => handleCustomFrameDelete(f.id, e)}
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-zinc-800 text-white rounded-full flex items-center justify-center text-[10px] font-bold shadow-md hover:bg-red-500 transition-colors z-10"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+
+                {/* 3. 서버 제공 프레임 목록 */}
                 {externalFrames.map((url, idx) => (
                   <button 
                     key={idx} 
