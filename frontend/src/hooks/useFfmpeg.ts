@@ -51,8 +51,37 @@ export const composeVideoOnClient = async (
     }
   }
 
-  if (decodedFrame.startsWith("#") && !hasFrame) {
-    // 텍스트 프레임이 없을 때만 단순 색상 필터 사용
+  // [수정] 사전 렌더링 프레임이 없고 디자인 프레임(PNG)인 경우 원본 로드
+  if (!hasFrame && !decodedFrame.startsWith("#")) {
+    try {
+      let frameData: Uint8Array;
+      if (decodedFrame.startsWith("blob:") || decodedFrame.startsWith("data:")) {
+        frameData = await fetchFile(decodedFrame);
+      } else {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+        const proxyUrl = `${apiUrl}/api/proxy-image?url=${encodeURIComponent(decodedFrame)}`;
+        frameData = await fetchFile(proxyUrl);
+      }
+      await ffmpeg.writeFile("frame.png", frameData);
+      hasFrame = true;
+    } catch (e) {
+      console.warn("[FFmpeg] 디자인 프레임 로드 실패:", e);
+    }
+  }
+
+  if (renderedFrameUrl && hasFrame) {
+    // [1] 텍스트가 포함된 컬러 프레임: 프레임 파일 자체가 배경(Base)이 되어야 함
+    filterComplex = `[4:v]scale=1080:1920,setsar=1 [base];`;
+    filterComplex += `[0:v]${cropFilter} [v1];`;
+    filterComplex += `[1:v]${cropFilter} [v2];`;
+    filterComplex += `[2:v]${cropFilter} [v3];`;
+    filterComplex += `[3:v]${cropFilter} [v4];`;
+    filterComplex += `[base][v1]overlay=63:76[o1];`;
+    filterComplex += `[o1][v2]overlay=550:76[o2];`;
+    filterComplex += `[o2][v3]overlay=63:789[o3];`;
+    filterComplex += `[o3][v4]overlay=550:789[out]`;
+  } else if (decodedFrame.startsWith("#")) {
+    // [2] 텍스트 없는 단순 컬레 프레임: 색상 필터를 배경으로 사용
     const hex = decodedFrame.replace("#", "0x");
     filterComplex = `color=c=${hex}:s=1080x1920:d=${duration} [bg];`;
     filterComplex += `[0:v]${cropFilter} [v1];`;
@@ -64,24 +93,7 @@ export const composeVideoOnClient = async (
     filterComplex += `[o2][v3]overlay=63:789[o3];`;
     filterComplex += `[o3][v4]overlay=550:789[out]`;
   } else {
-    // 이미지 프레임일 때 또는 사전 렌더링된 텍스트 프레임이 있을 때
-    if (!hasFrame) {
-      try {
-        let frameData: Uint8Array;
-        if (decodedFrame.startsWith("blob:") || decodedFrame.startsWith("data:")) {
-          frameData = await fetchFile(decodedFrame);
-        } else {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-          const proxyUrl = `${apiUrl}/api/proxy-image?url=${encodeURIComponent(decodedFrame)}`;
-          frameData = await fetchFile(proxyUrl);
-        }
-        await ffmpeg.writeFile("frame.png", frameData);
-        hasFrame = true;
-      } catch (e) {
-        console.warn("[FFmpeg] 프레임 로드 실패, 기본 배경으로 대체:", e);
-      }
-    }
-
+    // [3] 디자인 프레임(PNG) 또는 기타: 흰색 배경에 영상을 올리고 그 위에 PNG를 오버레이
     filterComplex = `color=c=white:s=1080x1920:d=${duration} [base];`;
     filterComplex += `[0:v]${cropFilter} [v1];`;
     filterComplex += `[1:v]${cropFilter} [v2];`;
