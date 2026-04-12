@@ -7,9 +7,11 @@ const cron = require("node-cron");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegInstaller = require("@ffmpeg-installer/ffmpeg");
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand, DeleteObjectsCommand, HeadObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { Upload } = require("@aws-sdk/lib-storage");
 const mime = require("mime-types");
+const crypto = require("crypto"); // UUID 생성용
 
 const https = require("https");
 
@@ -70,7 +72,22 @@ async function saveConfigToR2() {
   }
 }
 
-const { GetObjectCommand } = require("@aws-sdk/client-s3");
+// 서명된 URL (Presigned URL) 생성 헬퍼 함수
+async function getR2PresignedUrl(key, expiresIn = 86400) {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: key,
+    });
+    // 24시간(86400초) 동안 유효한 링크 생성
+    return await getSignedUrl(s3Client, command, { expiresIn });
+  } catch (err) {
+    console.error("[R2 Presign Error]", err);
+    return null;
+  }
+}
+
+const { GetObjectCommand: GetObjCmd } = require("@aws-sdk/client-s3");
 async function loadConfigFromR2() {
   try {
     const command = new GetObjectCommand({
@@ -227,11 +244,17 @@ if (!fs.existsSync("backend/uploads/temp")) fs.mkdirSync("backend/uploads/temp",
 
 const resultStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, resultDir),
-  filename: (req, file, cb) => cb(null, `result_${Date.now()}${path.extname(file.originalname)}`)
+  filename: (req, file, cb) => {
+    const uuid = crypto.randomUUID();
+    cb(null, `result_${uuid}${path.extname(file.originalname)}`);
+  }
 });
 const frameStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, "uploads/frames")),
-  filename: (req, file, cb) => cb(null, `frame_${Date.now()}.png`)
+  filename: (req, file, cb) => {
+    const uuid = crypto.randomUUID();
+    cb(null, `frame_${uuid}.png`);
+  }
 });
 
 const uploadResult = multer({ storage: resultStorage });
@@ -273,28 +296,42 @@ app.post("/api/config", async (req, res) => {
 });
 
 /**
- * [CORS 해결용 이미지 프록시]
- * R2에서 직접 불러올 때 발생하는 CORS 보안 문제를 해결하기 위해 서버가 대신 이미지를 내려받아 전달합니다.
- * 스트림 방식을 사용하여 서버 메모리 점유를 최소화합니다.
+ * [CORS 해결 및 Private 버킷 대응 이미지 프록시]
+ * 이제 버킷이 Private 상태여도 서버가 SDK 권한을 사용하여 이미지를 안전하게 가져옵니다.
  */
-app.get("/api/proxy-image", (req, res) => {
+app.get("/api/proxy-image", async (req, res) => {
   const imageUrl = req.query.url;
   if (!imageUrl) return res.status(400).send("URL이 필요합니다.");
 
   try {
-    https.get(imageUrl, (proxyRes) => {
-      if (proxyRes.statusCode !== 200) {
-        return res.status(proxyRes.statusCode).send("이미지를 불러올 수 없습니다.");
-      }
-      res.setHeader("Content-Type", proxyRes.headers["content-type"] || "image/png");
+    // R2 내부 키인지 확인 (퍼블릭 URL을 키로 변환)
+    if (imageUrl.includes(R2_PUBLIC_URL)) {
+      const key = imageUrl.replace(`${R2_PUBLIC_URL}/`, "").split("?")[0];
+      const command = new GetObjectCommand({
+        Bucket: R2_BUCKET_NAME,
+        Key: decodeURIComponent(key),
+      });
+      const response = await s3Client.send(command);
+      res.setHeader("Content-Type", response.ContentType || "image/png");
       res.setHeader("Access-Control-Allow-Origin", "*");
-      proxyRes.pipe(res);
-    }).on("error", (err) => {
-      console.error("[Proxy Error]", err);
-      res.status(500).send("이미지 프록시 오류");
-    });
+      response.Body.pipe(res);
+    } else {
+      // 외부 URL인 경우 기존 방식 유지
+      https.get(imageUrl, (proxyRes) => {
+        if (proxyRes.statusCode !== 200) {
+          return res.status(proxyRes.statusCode).send("이미지를 불러올 수 없습니다.");
+        }
+        res.setHeader("Content-Type", proxyRes.headers["content-type"] || "image/png");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        proxyRes.pipe(res);
+      }).on("error", (err) => {
+        console.error("[Proxy Error]", err);
+        res.status(500).send("이미지 프록시 오류");
+      });
+    }
   } catch (err) {
-    res.status(500).send("프록시 처리 실패");
+    console.error("[Proxy Exception]", err);
+    res.status(404).send("이미지가 존재하지 않거나 만료되었습니다.");
   }
 });
 
@@ -337,26 +374,28 @@ app.get("/api/download/:filename", (req, res) => {
   res.setHeader("Content-Disposition", `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
 
   if (fs.existsSync(targetPath)) {
-    // 1. 로컬에 있을 때 (res.download는 헤더를 자동으로 맞춰주지만, 이미 설정한 헤더와 충돌하지 않게 주의)
+    // 1. 로컬에 있을 때
     return res.download(targetPath, downloadName, (err) => {
        if (err && !res.headersSent) {
          res.status(500).send("Download failed");
        }
     });
   } else {
-    // 2. 로컬에 없을 때 -> R2 스트리밍
-    const r2Url = `${R2_PUBLIC_URL}/results/${filename}`;
-    console.log("[Download] Streaming from R2 with force name:", downloadName);
-    
-    https.get(r2Url, (r2Res) => {
-      if (r2Res.statusCode !== 200) {
-        return res.status(r2Res.statusCode).send("File not found on R2");
+    // 2. 로컬에 없을 때 -> R2 Presigned URL로 리다이렉트 (보안 및 고속 전송)
+    try {
+      const key = `results/${filename}`;
+      const presignedUrl = await getR2PresignedUrl(key);
+      
+      if (!presignedUrl) {
+        return res.status(404).send("파일이 만료되었거나 존재하지 않습니다.");
       }
-      r2Res.pipe(res);
-    }).on("error", (err) => {
+      
+      console.log(`[Download] Redirecting to Presigned URL for: ${filename}`);
+      res.redirect(presignedUrl);
+    } catch (err) {
       console.error("[Download Error]", err);
-      res.status(500).send("Streaming error");
-    });
+      res.status(500).send("다운로드 처리 중 오류 발생");
+    }
   }
 });
 
@@ -383,9 +422,8 @@ app.use("/uploads/results", (req, res, next) => {
 const videoStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, resultDir),
   filename: (req, file, cb) => {
-    const timestamp = Date.now();
-    const randomSuffix = Math.random().toString(36).substring(7);
-    cb(null, `vid_${timestamp}_${randomSuffix}.mp4`);
+    const uuid = crypto.randomUUID();
+    cb(null, `vid_${uuid}.mp4`);
   }
 });
 
@@ -429,10 +467,14 @@ app.get("/api/frames-list", async (req, res) => {
     const { Contents } = await s3Client.send(command);
     if (!Contents) return res.json([]);
     
-    // 파일명만 추출하여 공용 URL 생성
+    // 파일명만 추출하여 공용 URL 생성 (Private 버킷 대응을 위해 프록시 주소로 변환)
+    const currentBase = getCurrentBaseUrl(req);
     const urls = Contents
       .filter(obj => obj.Key.toLowerCase().endsWith(".png") || obj.Key.toLowerCase().endsWith(".jpg"))
-      .map(obj => `${R2_PUBLIC_URL}/${encodeURIComponent(obj.Key)}`);
+      .map(obj => {
+         const directUrl = `${R2_PUBLIC_URL}/${encodeURIComponent(obj.Key)}`;
+         return `${currentBase}/api/proxy-image?url=${encodeURIComponent(directUrl)}`;
+      });
       
     res.json(urls);
   } catch (err) {

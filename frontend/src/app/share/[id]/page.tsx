@@ -21,20 +21,29 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
 
   useEffect(() => {
     try {
-      const timeMatch = id.match(/result_(\d+)/);
-      if (timeMatch && timeMatch[1]) {
-        const date = new Date(parseInt(timeMatch[1], 10));
+      const tParam = searchParams.get("t");
+      if (tParam) {
+        const date = new Date(parseInt(tParam, 10));
         setTimestampStr(date.toLocaleString("ko-KR", { 
           year: "numeric", month: "long", day: "numeric", 
           hour: "2-digit", minute: "2-digit" 
         }));
       } else {
-        setTimestampStr(new Date().toLocaleString("ko-KR"));
+        // 폴백: 기존 파일명 추출 (신규 파일은 작동 안함)
+        const timeMatch = id.match(/result_(\d+)/);
+        if (timeMatch && timeMatch[1]) {
+          const date = new Date(parseInt(timeMatch[1], 10));
+          setTimestampStr(date.toLocaleString("ko-KR", { 
+            year: "numeric", month: "long", day: "numeric"
+          }));
+        } else {
+          setTimestampStr(new Date().toLocaleString("ko-KR"));
+        }
       }
     } catch {
       setTimestampStr("");
     }
-  }, [id]);
+  }, [id, searchParams]);
 
   const handleManualDownload = async (serverFile: string, saveName: string) => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
