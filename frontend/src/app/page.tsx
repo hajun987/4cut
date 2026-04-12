@@ -34,6 +34,7 @@ export default function Home() {
   const [intervalSeconds, setIntervalSeconds] = useState(6);
   const [maxShots, setMaxShots] = useState(6);
   const [showSettings, setShowSettings] = useState(false);
+  const [greetingMessage, setGreetingMessage] = useState<string | null>(null);
 
   // 나만의 프레임 상태
   const [customFrames, setCustomFrames] = useState<{ id: number; name: string; url: string }[]>([]);
@@ -91,9 +92,26 @@ export default function Home() {
       try {
         const res = await fetch(`${apiUrl}/api/config`);
         const data = await res.json();
-        if (data.frames) setExternalFrames(data.frames);
-        if (data.secretFrames) setSecretFrameMap(data.secretFrames);
-        if (code && data.secretFrames && data.secretFrames[code]) setSelectedFrame(data.secretFrames[code].trim());
+        
+        // 고유 프레임 데이터 구조 변경 대응 (url + message)
+        const secretMap = data.secretFrames || {};
+        setSecretFrameMap(secretMap);
+        
+        if (code && secretMap[code]) {
+           const entry = secretMap[code];
+           // 문자열일 경우(구버전)와 객체일 경우(신버전) 모두 대응
+           const frameUrl = typeof entry === 'string' ? entry : entry.url;
+           const message = typeof entry === 'string' ? null : entry.message;
+           
+           if (frameUrl) setSelectedFrame(frameUrl);
+           if (message) setGreetingMessage(message);
+        }
+
+        // 전체 프레임 목록 로드 (외부 프레임)
+        const framesRes = await fetch(`${apiUrl}/api/frames-list`);
+        const framesData = await framesRes.json();
+        if (Array.isArray(framesData)) setExternalFrames(framesData);
+        
       } catch (e) {
         console.error("초기 데이터 로드 실패", e);
       }
@@ -177,7 +195,12 @@ export default function Home() {
     return (
       <div className="w-full min-h-[100dvh] flex flex-col items-center justify-center bg-white text-zinc-900 border-t-8 border-primary relative">
         <div className="absolute inset-0 bg-primary/5 pattern-dots pointer-events-none" />
-        <div className="z-10 bg-white p-16 rounded-[3rem] shadow-[0_20px_60px_rgba(255,71,133,0.15)] flex flex-col items-center text-center border-2 border-primary/10">
+          {greetingMessage && (
+            <div className="mb-6 px-6 py-3 bg-primary/10 rounded-2xl animate-bounce-subtle border border-primary/20">
+              <p className="text-primary font-black text-lg">✨ {greetingMessage} ✨</p>
+            </div>
+          )}
+          
           <h1 className="text-5xl font-black mb-8 leading-tight tracking-tighter">
             나만의 <span className="text-primary">네컷 사진</span>을<br/>직접 만들어볼까요?
           </h1>

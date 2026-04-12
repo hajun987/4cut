@@ -80,6 +80,17 @@ async function loadConfigFromR2() {
     const response = await s3Client.send(command);
     const bodyContents = await response.Body.transformToString();
     const savedConfig = JSON.parse(bodyContents);
+    
+    // 데이터 구조 마이그레이션 로직 (기존 string URL -> {url, message} 객체)
+    if (savedConfig.secretFrames) {
+      Object.keys(savedConfig.secretFrames).forEach(code => {
+        const val = savedConfig.secretFrames[code];
+        if (typeof val === 'string') {
+          savedConfig.secretFrames[code] = { url: val, message: "" };
+        }
+      });
+    }
+    
     config = { ...config, ...savedConfig };
     console.log("[R2] Config loaded successfully:", config);
   } catch (err) {
@@ -201,7 +212,7 @@ let config = {
   intervalSeconds: 6,
   maxShots: 6,
   readySeconds: 10,
-  secretFrames: {},
+  secretFrames: {}, // { code: { url: string, message: string } }
   frameUrl: null
 };
 
@@ -233,8 +244,20 @@ app.get("/api/config", (req, res) => {
     maxShots: config.maxShots,
     readySeconds: config.readySeconds,
     secretFrames: config.secretFrames || {},
-    frameUrl: config.frameUrl
+    // [보안] 프론트엔드 코드 노출 방지를 위해 비밀번호는 포함하지 않음
   });
+});
+
+// 관리자 로그인 API
+app.post("/api/admin/login", (req, res) => {
+  const { password } = req.body;
+  const adminPass = process.env.ADMIN_PASSWORD || "0000";
+  
+  if (String(password) === String(adminPass)) {
+    res.json({ success: true });
+  } else {
+    res.status(401).json({ success: false, message: "비밀번호가 올바르지 않습니다." });
+  }
 });
 app.post("/api/config", async (req, res) => {
   const { intervalSeconds, maxShots, readySeconds, secretFrames, frameUrl } = req.body;

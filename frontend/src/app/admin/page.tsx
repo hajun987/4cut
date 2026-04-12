@@ -11,25 +11,37 @@ export default function AdminPage() {
   const [intervalSeconds, setIntervalSeconds] = useState(6);
   const [maxShots, setMaxShots] = useState(6);
   const [readySeconds, setReadySeconds] = useState(10);
-  const [secretFrames, setSecretFrames] = useState<Record<string, string>>({}); // { "코드": "프레임URL" }
+  const [secretFrames, setSecretFrames] = useState<Record<string, { url: string; message: string }>>({}); // { "코드": { url, message } }
   const [isSaving, setIsSaving] = useState(false);
   
   // 모달 상태 관리
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [modalFrameUrl, setModalFrameUrl] = useState("");
   const [modalCodeValue, setModalCodeValue] = useState("");
+  const [modalMessageValue, setModalMessageValue] = useState("");
   
   const [frames, setFrames] = useState<string[]>([]);
 
-  const checkPassword = (e: React.FormEvent) => {
+  const checkPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (passInput === "0000") {
-      setIsAuthenticated(true);
-      fetchConfig();
-      fetchFrames();
-    } else {
-      alert("비밀번호가 틀렸습니다.");
-      setPassInput("");
+    try {
+      const res = await fetch(`${apiUrl}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: passInput })
+      });
+      
+      if (res.ok) {
+        setIsAuthenticated(true);
+        fetchConfig();
+        fetchFrames();
+      } else {
+        const data = await res.json();
+        alert(data.message || "비밀번호가 틀렸습니다.");
+        setPassInput("");
+      }
+    } catch (err) {
+      alert("로그인 중 서버 오류가 발생했습니다.");
     }
   };
 
@@ -114,9 +126,10 @@ export default function AdminPage() {
 
   // 비밀 코드 할당 모달 열기
   const handleAssignSecretCode = (frameUrl: string) => {
-    const existingCode = Object.entries(secretFrames).find(([_, fUrl]) => fUrl === frameUrl)?.[0] || "";
+    const existingEntry = Object.entries(secretFrames).find(([_, data]) => data.url === frameUrl);
     setModalFrameUrl(frameUrl);
-    setModalCodeValue(existingCode);
+    setModalCodeValue(existingEntry ? existingEntry[0] : "");
+    setModalMessageValue(existingEntry ? existingEntry[1].message : "");
     setShowCodeModal(true);
   };
 
@@ -127,12 +140,12 @@ export default function AdminPage() {
     }
     
     // 이미 다른 프레임에 동일한 코드가 있는지 확인 (현재 프레임 제외)
-    const duplicateCode = Object.entries(secretFrames).find(([code, fUrl]) => code === modalCodeValue && fUrl !== modalFrameUrl);
+    const duplicateCode = Object.entries(secretFrames).find(([code, data]) => code === modalCodeValue && data.url !== modalFrameUrl);
     if (duplicateCode) {
       if (!confirm("이미 다른 프레임에 지정된 코드입니다. 이 프레임으로 변경하시겠습니까?")) return;
     }
 
-    const newSecretFrames = { ...secretFrames, [modalCodeValue.trim()]: modalFrameUrl };
+    const newSecretFrames = { ...secretFrames, [modalCodeValue.trim()]: { url: modalFrameUrl, message: modalMessageValue || "" } };
     setSecretFrames(newSecretFrames);
     updateSecretFramesOnServer(newSecretFrames);
     setShowCodeModal(false);
@@ -191,11 +204,11 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-[100dvh] bg-zinc-50 p-8 text-black pb-32">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <header className="flex justify-between items-center mb-10 pb-6 border-b border-zinc-200">
           <h1 className="text-3xl font-black tracking-tight text-zinc-900 flex items-center gap-3">
             <span className="bg-primary text-white text-sm px-3 py-1 rounded-lg">Admin</span>
-            기기 통합 설정창
+            고유 프레임 관리 센터
           </h1>
           <a href="/" className="px-6 py-3 bg-white border border-zinc-200 text-zinc-600 rounded-lg hover:bg-zinc-50 font-bold shadow-sm transition-colors">
             촬영 화면으로 돌아가기
@@ -203,25 +216,25 @@ export default function AdminPage() {
         </header>
 
         <div className="w-full">
-          <section className="bg-white p-8 rounded-3xl shadow-sm border border-zinc-200">
+          <section className="bg-white p-8 rounded-3xl shadow-sm border border-zinc-200 mb-10">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold flex items-center gap-2">🖼️ 내장 프레임 관리</h2>
+              <h2 className="text-xl font-bold flex items-center gap-2">📂 전체 라이브러리 (행사용 후보)</h2>
               
               <label className="cursor-pointer px-6 py-3 bg-primary/10 text-primary font-bold rounded-xl hover:bg-primary hover:text-white transition-colors shadow-sm">
-                + 새 디자인 올리기 (PNG)
+                + 새 디자인 업로드 (PNG)
                 <input type="file" accept="image/png, image/jpeg" className="hidden" onChange={handleFileUpload} />
               </label>
             </div>
             
-            <p className="text-sm text-zinc-500 mb-6 bg-zinc-50 p-4 rounded-xl font-medium border border-zinc-100">
-              * 이곳에 업로드된 이미지는 고객이 직접 액자로 선택할 수 있습니다. 1080x1920 픽셀에 가운데 4장이 투명하게 뚫려있어야 완벽합니다.
+            <p className="text-xs text-zinc-400 mb-6 bg-zinc-50 p-3 rounded-lg">
+              * 업로드한 뒤 각 이미지 아래의 `코드 부여` 버튼을 눌러 특정 이벤트용 비밀 코드를 생성하세요.
             </p>
 
             {frames.length > 0 ? (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 {frames.map((url, idx) => {
-                  const isSecret = Object.values(secretFrames).includes(url);
-                  const assignedCode = Object.entries(secretFrames).find(([_, fUrl]) => fUrl === url)?.[0];
+                  const isSecret = Object.values(secretFrames).some(data => data.url === url);
+                  const assignedCode = Object.entries(secretFrames).find(([_, data]) => data.url === url)?.[0];
 
                   return (
                     <div key={idx} className="relative group rounded-xl overflow-hidden border border-zinc-200 bg-zinc-100 aspect-[1080/1920]">
@@ -232,34 +245,24 @@ export default function AdminPage() {
                         className={`w-full h-full object-contain transition-all ${isSecret ? 'brightness-[0.4] grayscale-[0.5]' : ''}`} 
                       />
                       
-                      {/* 비밀 코드 배지 */}
                       {isSecret && (
                         <div className="absolute top-2 right-2 bg-yellow-400 text-black text-[10px] font-black px-2 py-1 rounded-md shadow-lg flex items-center gap-1 z-10">
                           🔑 {assignedCode}
                         </div>
                       )}
 
-                      {/* 중앙 상태 문구 */}
-                      {isSecret && (
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <span className="text-white/40 text-[10px] font-black uppercase tracking-widest border border-white/20 px-2 py-1 rounded">
-                            Secret Code Active
-                          </span>
-                        </div>
-                      )}
-
                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 backdrop-blur-sm">
                          <button 
                            onClick={() => handleAssignSecretCode(url)}
-                           className="w-3/4 py-2 bg-primary text-white font-bold rounded-lg shadow-lg hover:scale-105 transition-all text-sm flex items-center justify-center gap-2"
+                           className="w-11/12 py-1.5 bg-primary text-white font-bold rounded shadow-lg hover:scale-105 transition-all text-[10px] flex items-center justify-center gap-1"
                          >
-                           {isSecret ? "🔑 코드 변경" : "🔑 코드 부여"}
+                           {isSecret ? "🔑 코드/인사말 변경" : "🔑 코드 부여"}
                          </button>
                          <button 
                            onClick={() => handleDeleteFrame(url)}
-                           className="w-3/4 py-2 bg-red-500 text-white font-bold rounded-lg shadow-lg hover:bg-red-600 hover:scale-105 transition-all text-sm flex items-center justify-center gap-2"
+                           className="w-11/12 py-1.5 bg-red-500 text-white font-bold rounded shadow-lg hover:bg-red-600 hover:scale-105 transition-all text-[10px] flex items-center justify-center gap-1"
                          >
-                           🗑️ 삭제
+                           🗑️ 영구 삭제
                          </button>
                       </div>
                     </div>
@@ -267,72 +270,67 @@ export default function AdminPage() {
                 })}
               </div>
             ) : (
-              <div className="w-full py-16 border-2 border-dashed border-zinc-200 rounded-2xl flex flex-col items-center justify-center text-zinc-400 bg-zinc-50/50">
-                <span className="text-4xl mb-3">📭</span>
-                <p className="font-bold">등록된 외부 프레임이 없습니다</p>
+              <div className="w-full py-10 border-2 border-dashed border-zinc-200 rounded-2xl flex flex-col items-center justify-center text-zinc-400 bg-zinc-50/50">
+                <p className="text-sm font-bold">라이브러리가 비어있습니다.</p>
               </div>
             )}
           </section>
-
         </div>
 
         {/* 비밀 고유 코드 관리 섹션 */}
-        <section className="mt-10 bg-white p-8 rounded-3xl shadow-sm border border-zinc-200">
-          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">🤫 비밀 프레임 (고유 코드) 목록</h2>
-          <div className="text-sm text-zinc-500 mb-6 bg-zinc-50 p-4 rounded-xl font-medium border border-zinc-100">
-            * 코드가 부여된 프레임은 전용 링크(`?code=코드명`)로 들어온 고객에게만 보이며, 일반 고객에게는 숨겨집니다.
-          </div>
+        <section className="bg-white p-8 rounded-3xl shadow-sm border border-zinc-200">
+          <h2 className="text-xl font-black mb-6 flex items-center gap-2 text-primary">🤫 비밀 프레임 (고유 코드) 목록 및 인사말</h2>
           
           {Object.keys(secretFrames).length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="border-b border-zinc-100">
-                    <th className="py-4 font-bold text-zinc-600">고유 코드</th>
-                    <th className="py-4 font-bold text-zinc-600">연결된 프레임 미리보기</th>
-                    <th className="py-4 font-bold text-zinc-600">링크 복사</th>
-                    <th className="py-4 font-bold text-zinc-600">관리</th>
+                  <tr className="border-b border-zinc-100 italic text-zinc-400 text-xs">
+                    <th className="py-4 font-bold">코드</th>
+                    <th className="py-4 font-bold">인사말 (첫화면 노출)</th>
+                    <th className="py-4 font-bold">미리보기/링크</th>
+                    <th className="py-4 font-bold text-right">관리</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(secretFrames).map(([code, url]) => (
+                  {Object.entries(secretFrames).map(([code, data]) => (
                     <tr key={code} className="border-b border-zinc-50 hover:bg-zinc-50/50 transition-colors">
                       <td className="py-4">
-                        <span className="px-3 py-1 bg-primary/10 text-primary font-black rounded-lg">
+                        <span className="px-3 py-1 bg-primary text-white font-black rounded text-xs">
                           {code}
                         </span>
                       </td>
-                      <td className="py-4 font-medium">
-                         <div className="flex items-center gap-3">
+                      <td className="py-4">
+                        <p className="text-sm font-bold text-zinc-700 max-w-[250px] truncate">
+                          {data.message || "- 인사말 없음 -"}
+                        </p>
+                      </td>
+                      <td className="py-4">
+                         <div className="flex items-center gap-4">
                            <img 
                              crossOrigin="anonymous" 
-                             src={`${apiUrl}/api/proxy-image?url=${encodeURIComponent(url)}`} 
+                             src={`${apiUrl}/api/proxy-image?url=${encodeURIComponent(data.url)}`} 
                              alt="secret frame" 
-                             className="h-16 w-auto rounded border border-zinc-200" 
+                             className="h-12 w-auto rounded border border-zinc-100 shadow-sm" 
                            />
-                           <span className="text-xs text-zinc-400 truncate max-w-[150px]">{url.split('/').pop()}</span>
+                           <button 
+                             onClick={() => {
+                               const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+                               const link = `${baseUrl}/?code=${code}`;
+                               navigator.clipboard.writeText(link);
+                               alert("링크가 복사되었습니다!");
+                             }}
+                             className="text-[10px] font-black text-zinc-400 hover:text-primary underline"
+                           >
+                             🔗 링크 복사
+                           </button>
                          </div>
                       </td>
-                      <td className="py-4">
-                        <button 
-                          onClick={() => {
-                            const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-                            const link = `${baseUrl}/?code=${code}`;
-                            navigator.clipboard.writeText(link);
-                            alert("링크가 복사되었습니다!");
-                          }}
-                          className="text-xs font-bold text-zinc-400 hover:text-primary underline flex items-center gap-1"
-                        >
-                          🔗 전용 링크 복사
-                        </button>
-                      </td>
-                      <td className="py-4">
-                        <button 
-                          onClick={() => handleRemoveSecretCode(code)}
-                          className="text-red-400 hover:text-red-500 font-bold text-sm"
-                        >
-                          연결 해제
-                        </button>
+                      <td className="py-4 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => handleAssignSecretCode(data.url)} className="text-zinc-400 hover:text-primary text-xs font-bold">수정</button>
+                          <button onClick={() => handleRemoveSecretCode(code)} className="text-red-300 hover:text-red-500 text-xs font-bold">해제</button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -341,7 +339,7 @@ export default function AdminPage() {
             </div>
           ) : (
             <div className="py-10 text-center text-zinc-400 font-medium">
-              아직 특별한 코드가 부여된 프레임이 없습니다.
+              아직 지정된 고유 코드가 없습니다. 라이브러리에서 코드를 부여하세요.
             </div>
           )}
         </section>
@@ -354,27 +352,42 @@ export default function AdminPage() {
             <h3 className="text-xl font-black mb-2 flex items-center gap-2">🔑 고유 코드 설정</h3>
             <p className="text-sm text-zinc-500 mb-6 font-medium break-keep">이 프레임에 접근할 수 있는 특별한 단어나 코드를 입력하세요.</p>
             
-            <input 
-              type="text"
-              placeholder="예: event_2026"
-              value={modalCodeValue}
-              onChange={(e) => setModalCodeValue(e.target.value)}
-              className="w-full border-2 border-zinc-200 p-4 rounded-xl text-lg font-bold outline-none focus:border-primary transition-colors mb-6"
-              autoFocus
-            />
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-[10px] font-black text-zinc-400 uppercase mb-1 block">고유 코드 (영문/숫자 권장)</label>
+                <input 
+                  type="text"
+                  placeholder="예: wedding_2026"
+                  value={modalCodeValue}
+                  onChange={(e) => setModalCodeValue(e.target.value)}
+                  className="w-full border-2 border-zinc-100 p-3 rounded-xl text-lg font-bold outline-none focus:border-primary transition-colors"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-zinc-400 uppercase mb-1 block">첫 화면 인사말 (선택)</label>
+                <input 
+                  type="text"
+                  placeholder="예: 행복한 결혼식에 오신 것을 환영합니다!"
+                  value={modalMessageValue}
+                  onChange={(e) => setModalMessageValue(e.target.value)}
+                  className="w-full border-2 border-zinc-100 p-3 rounded-xl text-sm font-medium outline-none focus:border-primary transition-colors"
+                />
+              </div>
+            </div>
 
             <div className="flex gap-3">
               <button 
                 onClick={() => setShowCodeModal(false)}
-                className="flex-1 py-4 bg-zinc-100 text-zinc-500 font-bold rounded-xl hover:bg-zinc-200 transition-colors"
+                className="flex-1 py-4 bg-zinc-50 text-zinc-400 font-bold rounded-xl hover:bg-zinc-100 transition-colors"
               >
                 취소
               </button>
               <button 
                 onClick={saveCodeFromModal}
-                className="flex-1 py-4 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                className="flex-1 py-4 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all text-sm"
               >
-                적용하기
+                저장하기
               </button>
             </div>
           </div>
