@@ -7,6 +7,7 @@ import CanvasRenderer from "@/components/CanvasRenderer";
 import ResultQR from "@/components/ResultQR";
 
 export default function Home() {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
   const [step, setStep] = useState<"HOME" | "SHOOTING" | "SELECTION" | "FRAME_SELECTION" | "RESULT">("HOME");
   
   const [shots, setShots] = useState<string[]>([]);
@@ -28,7 +29,6 @@ export default function Home() {
   const [engineLoaded, setEngineLoaded] = useState(false);
 
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     if (code) setSecretCode(code);
@@ -169,7 +169,12 @@ export default function Home() {
                 <path fill={selectedFrame} fillRule="evenodd" d="M 0 0 H 1080 V 1920 H 0 Z M 65 78 H 528 V 767 H 65 Z M 552 78 H 1015 V 767 H 552 Z M 65 791 H 528 V 1480 H 65 Z M 552 791 H 1015 V 1480 H 552 Z" />
               </svg>
             ) : (
-              <img crossOrigin="anonymous" src={selectedFrame} alt="frame overlay" className="absolute inset-0 w-full h-full object-cover pointer-events-none z-10" />
+              <img 
+                crossOrigin="anonymous" 
+                src={selectedFrame.startsWith("http") ? `${apiUrl}/api/proxy-image?url=${encodeURIComponent(selectedFrame)}` : selectedFrame} 
+                alt="frame overlay" 
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none z-10" 
+              />
             )}
           </div>
         </div>
@@ -286,7 +291,17 @@ export default function Home() {
               </div>
               <div className={`${activeTab === "DESIGN" ? "flex" : "hidden md:hidden"} lg:flex gap-3 mt-0 lg:mt-6`}>
                 {externalFrames.map((url, idx) => (
-                  <button key={idx} onClick={() => setSelectedFrame(url)} className={`w-16 lg:w-32 aspect-[1080/1920] rounded-md lg:rounded-xl shadow-md border-2 lg:border-4 flex-shrink-0 overflow-hidden ${selectedFrame === url ? 'border-primary' : 'border-zinc-200'}`}><img crossOrigin="anonymous" src={url} className="w-full h-full object-cover" /></button>
+                  <button 
+                    key={idx} 
+                    onClick={() => setSelectedFrame(url)} 
+                    className={`w-16 lg:w-32 aspect-[1080/1920] rounded-md lg:rounded-xl shadow-md border-2 lg:border-4 flex-shrink-0 overflow-hidden ${selectedFrame === url ? 'border-primary' : 'border-zinc-200'}`}
+                  >
+                    <img 
+                      crossOrigin="anonymous" 
+                      src={`${apiUrl}/api/proxy-image?url=${encodeURIComponent(url)}`} 
+                      className="w-full h-full object-cover" 
+                    />
+                  </button>
                 ))}
               </div>
             </div>
