@@ -98,14 +98,6 @@ export default function WebcamCapture({
     const video = videoRef.current;
     if (video.videoWidth === 0) return;
 
-    // 플래시 효과 및 .mp3 소리 재생
-    setShowFlash(true);
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(e => console.error("사운드 재생 실패", e));
-    }
-    setTimeout(() => setShowFlash(false), 200);
-
     const canvas = canvasRef.current;
     canvas.width = 463;
     canvas.height = 689;
@@ -198,7 +190,23 @@ export default function WebcamCapture({
          console.warn(`[Rec] Shot ${i+1}: MediaRecorder was inactive or null`);
       }
 
+      // --- iOS/모바일 사운드-플래시 동기화 강화 로직 ---
+      // 1. 사운드 선행 재생 (녹화 중지 후 바로 실행)
+      if (audioRef.current) {
+         audioRef.current.currentTime = 0;
+         audioRef.current.play().catch(e => console.error("사운드 재생 실패", e));
+      }
+      
+      // 2. 사운드가 출력될 수 있는 아주 짧은 여유시간 (80ms) 부여
+      await new Promise(res => setTimeout(res, 80));
+
+      // 3. 플래시 터뜨림과 동시에 캡처
+      setShowFlash(true);
       const photoDataUrl = takePhotoAndCrop();
+      
+      // 4. 플래시는 200ms 뒤에 꺼지도록
+      setTimeout(() => setShowFlash(false), 200);
+
       if (photoDataUrl) {
          onCapture(photoDataUrl, videoBlob);
       } else {
