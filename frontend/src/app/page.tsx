@@ -273,9 +273,11 @@ export default function Home() {
         )}
       </section>
 
-      <a href="/admin" className="absolute bottom-6 right-6 text-[8px] font-semibold text-zinc-300 hover:text-zinc-500 z-50">
-        Admin ({process.env.NEXT_PUBLIC_API_URL || "local:4000"})
-      </a>
+      {step === "START" && (
+        <a href="/admin" className="absolute bottom-6 right-6 text-[8px] font-semibold text-zinc-300 hover:text-zinc-500 z-50">
+          Admin
+        </a>
+      )}
     </div>
   );
 }
