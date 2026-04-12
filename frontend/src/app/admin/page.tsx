@@ -159,7 +159,7 @@ export default function AdminPage() {
     updateSecretFramesOnServer(newSecretFrames);
   };
 
-  const updateSecretFramesOnServer = async (newSecretFrames: Record<string, string>) => {
+  const updateSecretFramesOnServer = async (newSecretFrames: Record<string, { url: string; message: string }>) => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/config`, {
         method: "POST",
