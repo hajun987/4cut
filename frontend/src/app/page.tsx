@@ -11,7 +11,7 @@ export default function Home() {
   const [step, setStep] = useState<"HOME" | "SHOOTING" | "SELECTION" | "FRAME_SELECTION" | "RESULT">("HOME");
   
   const [shots, setShots] = useState<string[]>([]);
-  const [shotVideos, setShotVideos] = useState<Blob[]>([]);
+  const [shotVideos, setShotVideos] = useState<(Blob | null)[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<(string | null)[]>([null, null, null, null]);
   const [selectedIndices, setSelectedIndices] = useState<(number | null)[]>([null, null, null, null]);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -129,9 +129,9 @@ export default function Home() {
     return (
       <div className="w-full min-h-[100dvh] flex flex-col items-center justify-center bg-zinc-50 relative">
         <WebcamCapture 
-          onCapture={(image, videoBlob) => {
-             setShots(prev => [...prev, image]);
-             if (videoBlob) setShotVideos(prev => [...prev, videoBlob]);
+          onCapture={(photo: string, video?: Blob) => {
+            setShots(prev => [...prev, photo]);
+            setShotVideos(prev => [...prev, video || null]);
           }} 
           isCapturing={isCapturing}
           setIsCapturing={setIsCapturing}
@@ -260,7 +260,7 @@ export default function Home() {
                   selectedIndices={selectedIndices}
                   selectedFrame={selectedFrame}
                   shotImages={shots}
-                  shotVideos={shotVideos}
+                  shotVideos={shotVideos as (Blob | null)[]}
                   onUploaded={(url, id, vidId, localUrl) => {
                     setFinalQrUrl(localUrl || url); 
                     setFinalImageId(id);

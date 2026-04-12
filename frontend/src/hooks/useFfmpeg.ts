@@ -28,9 +28,9 @@ export const composeVideoOnClient = async (
     filterComplex += `[o1][v2]overlay=550:76:shortest=1[o2];`;
     filterComplex += `[o2][v3]overlay=63:789:shortest=1[o3];`;
     filterComplex += `[o3][v4]overlay=550:789:shortest=1[out]`;
-  } else {
-    // 이미지 프레임일 때 - R2 CORS 이슈 방지를 위해 프록시 주소 활용 시도 가능
-    const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(frameUrlOrColor)}`;
+    // 이미지 프레임일 때 - R2 CORS 이슈 방지를 위해 프록시 주소 활용
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const proxyUrl = `${apiUrl}/api/proxy-image?url=${encodeURIComponent(frameUrlOrColor)}`;
     await ffmpeg.writeFile("frame.png", await fetchFile(proxyUrl));
     filterComplex = `color=c=white:s=1080x1920:d=4 [base];`;
     filterComplex += `[0:v]${cropFilter} [v1];`;

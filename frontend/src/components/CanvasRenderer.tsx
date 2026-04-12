@@ -7,7 +7,7 @@ interface CanvasRendererProps {
   selectedIndices: (number | null)[];
   selectedFrame: string;
   shotImages: string[];
-  shotVideos: Blob[];
+  shotVideos: (Blob | null)[];
   onUploaded: (serverResultUrl: string, finalImageId: string, videoId?: string, localPreviewUrl?: string) => void;
 }
 
@@ -139,7 +139,9 @@ export default function CanvasRenderer({ selectedSlots, selectedIndices, selecte
           });
 
           if (videoBlobs.length !== 4) {
-             console.warn(`[Video] 비디오 ${videoBlobs.length}개만 수집됨. 4개 필요. 영상 생성 건너뜀.`);
+             console.warn(`[Video] 비디오 조각이 ${videoBlobs.length}개만 확보되었습니다 (4개 필요). 영상 합성을 건너뜁니다.`);
+             setLoadingText("일부 영상 조각이 누락되어 타임랩스 생성을 건너뜁니다...");
+             await new Promise(res => setTimeout(res, 2000));
           } else {
             // 2. 브라우저 엔진(FFmpeg) 인스턴스 확보 및 실행
             const { composeVideoOnClient } = await import("@/hooks/useFfmpeg");

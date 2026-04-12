@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 
 export default function AdminPage() {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passInput, setPassInput] = useState("");
   
@@ -263,8 +264,8 @@ export default function AdminPage() {
                   return (
                     <div key={idx} className="relative group rounded-xl overflow-hidden border border-zinc-200 bg-zinc-100 aspect-[1080/1920]">
                       <img 
-                        crossOrigin="anonymous"
-                        src={url} 
+                        crossOrigin="anonymous" 
+                        src={`${apiUrl}/api/proxy-image?url=${encodeURIComponent(url)}`} 
                         alt="frame thumbnail" 
                         className={`w-full h-full object-contain transition-all ${isSecret ? 'brightness-[0.4] grayscale-[0.5]' : ''}`} 
                       />
@@ -341,7 +342,12 @@ export default function AdminPage() {
                       </td>
                       <td className="py-4 font-medium">
                          <div className="flex items-center gap-3">
-                           <img crossOrigin="anonymous" src={url} alt="secret frame" className="h-16 w-auto rounded border border-zinc-200" />
+                           <img 
+                             crossOrigin="anonymous" 
+                             src={`${apiUrl}/api/proxy-image?url=${encodeURIComponent(url)}`} 
+                             alt="secret frame" 
+                             className="h-16 w-auto rounded border border-zinc-200" 
+                           />
                            <span className="text-xs text-zinc-400 truncate max-w-[150px]">{url.split('/').pop()}</span>
                          </div>
                       </td>
