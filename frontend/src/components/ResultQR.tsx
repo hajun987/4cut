@@ -28,17 +28,17 @@ export default function ResultQR({ url, imagePreview, imageId, videoId }: Result
   };
 
   return (
-    <div className="min-h-[100dvh] bg-zinc-950 p-4 lg:p-12 flex items-center justify-center">
-      <div className="max-w-5xl w-full mx-auto flex flex-col lg:flex-row gap-8 lg:gap-16 items-center lg:items-start">
+    <div className="min-h-[100dvh] bg-zinc-950 p-4 lg:p-12 flex items-center justify-center overflow-x-hidden">
+      <div className="max-w-6xl w-full mx-auto flex flex-col lg:flex-row gap-8 lg:gap-20 items-center justify-center">
         
         {/* 완성된 사진 프리뷰 (모바일 최소 높이 강제 확보) */}
         {imagePreview && (
-          <div className="flex-[2] lg:flex-1 flex justify-center w-full min-h-[50dvh] lg:min-h-0">
+          <div className="flex-[2] lg:flex-1 flex justify-center w-full min-h-[50dvh] lg:min-h-screen items-center">
             <img 
-              crossOrigin="anonymous"
+              crossOrigin={imagePreview.startsWith("data:") ? undefined : "anonymous"}
               src={imagePreview} 
               alt="Final Preview" 
-              className="w-full max-w-sm lg:max-w-md rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] object-contain border-2 border-white/10"
+              className="w-full max-w-[320px] lg:max-w-md rounded-xl shadow-[0_20px_80px_rgba(255,71,133,0.3)] object-contain border-4 border-white/5 transition-all hover:scale-[1.02]"
             />
           </div>
         )}

@@ -146,7 +146,9 @@ export default function Home() {
     const qrTargetUrl = finalVideoId 
        ? `${baseUrl}/share/${finalImageId}?vid=${finalVideoId}` 
        : `${baseUrl}/share/${finalImageId}`;
-    return <ResultQR url={qrTargetUrl} imagePreview={finalQrUrl} imageId={finalImageId} videoId={finalVideoId || undefined} />;
+    
+    // finalQrUrl 대신 finalQrUrl(서버) 혹은 local 미리보기(base64)를 상황에 맞춰 사용하도록 ResultQR에 전달
+    return <ResultQR url={qrTargetUrl} imagePreview={finalQrUrl || ""} imageId={finalImageId} videoId={finalVideoId || undefined} />;
   }
 
   const pastelColors = [
@@ -154,10 +156,10 @@ export default function Home() {
   ];
 
   return (
-    <div className="w-full h-screen lg:h-auto flex flex-col lg:flex-row relative bg-white text-zinc-900 border-t-8 border-primary overflow-hidden lg:overflow-visible">
+    <div className="w-full min-h-[100dvh] flex flex-col lg:flex-row relative bg-white text-zinc-900 border-t-8 border-primary overflow-x-hidden lg:overflow-visible">
       
-      {/* 1. 상단 프리뷰 영역 (모바일에서 55% 고정 및 최상단 배치) */}
-      <section className="h-[55dvh] lg:h-auto lg:flex-1 flex flex-col items-center justify-center p-4 lg:p-8 bg-zinc-100 relative border-b lg:border-b-0 lg:border-l border-zinc-200 order-1 lg:order-2">
+      {/* 1. 상단 프리뷰 영역 (모바일 55dvh, 데스크탑 최소 화면 높이 보장) */}
+      <section className="h-[55dvh] lg:min-h-screen lg:h-auto lg:flex-[1.2] flex flex-col items-center justify-center p-4 lg:p-12 bg-zinc-100 relative border-b lg:border-b-0 lg:border-l border-zinc-200 order-1 lg:order-2">
         <div className="w-full h-full max-h-[100%] flex items-center justify-center mb-0 lg:mb-8 perspective">
           <div className="h-full aspect-[1080/1920] relative rounded-lg bg-zinc-200/50 shadow-[0_15px_40px_rgba(0,0,0,0.15)] overflow-hidden transition-transform duration-500 transform lg:hover:scale-[1.02]">
             <PhotoSelector selectedSlots={selectedSlots} setSelectedSlots={setSelectedSlots} />
@@ -178,8 +180,9 @@ export default function Home() {
                 selectedFrame={selectedFrame}
                 shotImages={shots}
                 shotVideos={shotVideos}
-                onUploaded={(url, id, vidId) => {
-                  setFinalQrUrl(url); 
+                onUploaded={(url, id, vidId, localUrl) => {
+                  // localUrl(베이스64)이 있으면 그것을 우선적으로 미리보기에 사용하도록 설정
+                  setFinalQrUrl(localUrl || url); 
                   setFinalImageId(id);
                   if (vidId) setFinalVideoId(vidId);
                   setStep("RESULT");
@@ -189,8 +192,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 2. 하단 리스트/컨트롤 영역 (모바일에서 45% 고정 및 하단 배치) */}
-      <section className="h-[45dvh] lg:h-auto lg:flex-1 flex flex-col p-4 lg:p-8 justify-center bg-zinc-50 border-t lg:border-t-0 lg:border-r border-zinc-200 z-20 order-2 lg:order-1 relative">
+      {/* 2. 하단 리스트/컨트롤 영역 (모바일 45dvh, 데스크탑 최소 화면 높이 보장) */}
+      <section className="h-[45dvh] lg:min-h-screen lg:h-auto lg:flex-1 flex flex-col p-4 lg:p-12 justify-center bg-zinc-50 border-t lg:border-t-0 lg:border-r border-zinc-200 z-20 order-2 lg:order-1 relative">
         {step === "SELECTION" ? (
           <>
             <div className="mb-2 lg:mb-6 pt-0 lg:pt-4 text-center lg:text-left">

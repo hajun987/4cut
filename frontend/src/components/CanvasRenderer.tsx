@@ -7,7 +7,7 @@ interface CanvasRendererProps {
   selectedFrame: string;
   shotImages: string[];
   shotVideos: Blob[];
-  onUploaded: (serverResultUrl: string, finalImageId: string, videoUrl?: string) => void;
+  onUploaded: (serverResultUrl: string, finalImageId: string, videoId?: string, localPreviewUrl?: string) => void;
 }
 
 export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImages, shotVideos, onUploaded }: CanvasRendererProps) {
@@ -126,9 +126,10 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
       if (mode === 'video') {
         setLoadingText("브라우저에서 영상을 직접 합성 중입니다 (쾌속 모드) 🚀");
         try {
-          // 1. 촬영된 비디오 조각들 수집
+          // 1. 선택된 슬롯의 인덱스를 찾아 해당 비디오 조각들 수집
           const videoBlobs: Blob[] = [];
           selectedSlots.forEach((slotDataUrl) => {
+            // 선택된 사진의 데이터URL을 shots 배열에서 찾아 실제 촬영된 순서(index)를 파악
             const index = shotImages.indexOf(slotDataUrl);
             if (index !== -1 && shotVideos[index]) {
               videoBlobs.push(shotVideos[index]);
@@ -199,8 +200,9 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
        */
 
       setTimeout(() => {
-        onUploaded(finalImageUrl, finalImageId, uploadedVideoId);
-      }, 2000);
+        // finalDataUrl(로컬 베이스64)을 4번째 인자로 전달하여 즉시 미리보기 구현
+        onUploaded(finalImageUrl, finalImageId, uploadedVideoId, finalDataUrl);
+      }, 1500);
 
     } catch (error: any) {
       console.error("합성 치명적 오류:", error);
