@@ -12,14 +12,22 @@ interface ResultQRProps {
 export default function ResultQR({ url, imagePreview, imageId, videoId }: ResultQRProps) {
   if (!url) return null;
 
-  // 수동 다운로드 실행 함수
+  // 수동 다운로드 실행 함수 (크롬 확장자 소실 이슈 대응)
   const handleDownload = (fileName: string) => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-    const isVideo = fileName.toLowerCase().endsWith(".mp4");
+    // 💡 ID 접두어(vid_) 또는 확장자로 파일 형식 정확히 판별
+    const isVideo = fileName.startsWith('vid_') || fileName.toLowerCase().endsWith(".mp4");
     const saveName = isVideo ? "4cut_video.mp4" : "4cut_photo.jpg";
     const downloadUrl = `${apiUrl}/api/download/${fileName}?name=${encodeURIComponent(saveName)}`;
     
-    window.location.assign(downloadUrl);
+    // a 태그를 생성하여 download 속성을 부여하면 브라우저가 파일명을 더 잘 인식합니다.
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.setAttribute("download", saveName);
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
