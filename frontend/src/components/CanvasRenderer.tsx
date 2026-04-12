@@ -103,14 +103,22 @@ export default function CanvasRenderer({
         // 폰트가 로드될 때까지 기다림 (브라우저 캐시 활용)
         await document.fonts.ready;
         
+        const lines = frameText.split("\n");
         const fontSizePx = frameFontSize * 1.5;
+        const lineHeight = fontSizePx * 1.2;
+        const totalHeight = lineHeight * lines.length;
+        
         ctx.font = `bold ${fontSizePx}px ${frameFont}, sans-serif`;
         ctx.fillStyle = frameTextColor;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         
-        // 하단 여백의 정중앙 (x=540, y=1481 + 439/2 = 약 1700)
-        ctx.fillText(frameText, 540, 1700);
+        // 하단 여백의 정중앙 (x=540, y=1481 + 439/2 = 약 1700)에서 줄 수에 맞춰 시작 Y점 보정
+        const startY = 1700 - (totalHeight / 2) + (lineHeight / 2);
+        
+        lines.forEach((line, i) => {
+          ctx.fillText(line, 540, startY + (lineHeight * i));
+        });
       }
 
       const finalDataUrl = canvas.toDataURL("image/jpeg", 0.95);

@@ -303,18 +303,25 @@ export default function Home() {
             {selectedFrame.startsWith("#") ? (
               <svg width="100%" height="100%" viewBox="0 0 1080 1920" className="absolute inset-0 pointer-events-none z-10">
                 <path fill={selectedFrame} fillRule="evenodd" d="M 0 0 H 1080 V 1920 H 0 Z M 65 78 H 528 V 767 H 65 Z M 552 78 H 1015 V 767 H 552 Z M 65 791 H 528 V 1480 H 65 Z M 552 791 H 1015 V 1480 H 552 Z" />
-                {frameText && (
-                  <text 
-                    x="540" 
-                    y="1700" 
-                    textAnchor="middle" 
-                    dominantBaseline="middle" 
-                    fill={frameTextColor} 
-                    style={{ fontFamily: frameFont, fontSize: `${frameFontSize * 1.5}px`, fontWeight: '700' }}
-                  >
-                    {frameText}
-                  </text>
-                )}
+                {frameText && frameText.split("\n").map((line, i, arr) => {
+                  const fontSizePx = frameFontSize * 1.5;
+                  const lineHeight = fontSizePx * 1.2;
+                  const totalHeight = lineHeight * arr.length;
+                  const startY = 1700 - (totalHeight / 2) + (lineHeight / 2);
+                  return (
+                    <text 
+                      key={i}
+                      x="540" 
+                      y={startY + (lineHeight * i)} 
+                      textAnchor="middle" 
+                      dominantBaseline="middle" 
+                      fill={frameTextColor} 
+                      style={{ fontFamily: frameFont, fontSize: `${fontSizePx}px`, fontWeight: '700' }}
+                    >
+                      {line}
+                    </text>
+                  );
+                })}
               </svg>
             ) : (
               <img 
@@ -434,7 +441,7 @@ export default function Home() {
               <button onClick={() => setActiveTab("DESIGN")} className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${activeTab === "DESIGN" ? "bg-white text-primary shadow-sm" : "text-zinc-500"}`}>디자인</button>
             </div>
 
-            <div className="flex-1 overflow-x-auto lg:overflow-y-auto hide-scrollbar">
+            <div className="flex-none lg:flex-1 overflow-x-auto lg:overflow-y-auto hide-scrollbar">
               <div className={`${activeTab === "COLOR" ? "flex" : "hidden md:hidden"} lg:flex gap-4 flex-nowrap lg:flex-wrap`}>
                 {pastelColors.map(c => (
                   <button key={c} onClick={() => setSelectedFrame(c)} className={`w-14 h-14 lg:w-24 lg:h-24 rounded-xl shadow-lg border-2 lg:border-4 flex-shrink-0 transition-transform hover:scale-105 ${selectedFrame === c ? 'border-primary ring-2 ring-primary/20' : 'border-zinc-200 hover:border-zinc-300'}`} style={{ backgroundColor: c }} />
@@ -460,59 +467,57 @@ export default function Home() {
 
               {/* 컬러 프레임일 경우 텍스트 설정 UI 추가 */}
               {selectedFrame.startsWith("#") && (
-                <div className="mt-6 lg:mt-10 p-4 lg:p-6 bg-white rounded-2xl border-2 border-zinc-100 shadow-sm space-y-4 lg:space-y-6">
-                  <h3 className="text-sm lg:text-lg font-bold text-zinc-800 flex items-center gap-2">✍️ 하단 문구 삽입</h3>
+                <div className="mt-4 lg:mt-6 p-4 lg:p-5 bg-white rounded-2xl border-2 border-zinc-100 shadow-sm space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-bold text-zinc-800 flex items-center gap-2">✍️ 하단 문구 (가운데 정렬)</h3>
+                    <p className="text-[10px] text-zinc-400 font-medium">엔터로 줄바꿈 가능</p>
+                  </div>
                   
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                       <label className="text-[10px] lg:text-xs font-black text-zinc-400 uppercase">내용</label>
-                       <input 
-                         type="text" 
-                         value={frameText} 
-                         onChange={(e) => setFrameText(e.target.value)}
-                         placeholder="여기에 문구를 입력하세요"
-                         className="w-full bg-zinc-50 border-2 border-zinc-100 p-3 rounded-xl text-sm outline-none focus:border-primary transition-colors"
-                       />
-                    </div>
-                    
-                    <div className="space-y-2">
-                       <label className="text-[10px] lg:text-xs font-black text-zinc-400 uppercase">폰트</label>
+                  <textarea 
+                    value={frameText} 
+                    onChange={(e) => setFrameText(e.target.value)}
+                    placeholder="여기에 문구를 입력하세요"
+                    rows={2}
+                    className="w-full bg-zinc-50 border-2 border-zinc-100 p-3 rounded-xl text-sm text-center font-bold outline-none focus:border-primary transition-colors resize-none"
+                  />
+
+                  <div className="flex flex-wrap lg:flex-nowrap gap-3 items-end">
+                    <div className="flex-1 min-w-[120px] space-y-1.5">
+                       <label className="text-[10px] font-black text-zinc-400 uppercase">폰트</label>
                        <select 
                          value={frameFont} 
                          onChange={(e) => setFrameFont(e.target.value)}
-                         className="w-full bg-zinc-50 border-2 border-zinc-100 p-3 rounded-xl text-sm outline-none focus:border-primary transition-colors"
+                         className="w-full bg-zinc-50 border border-zinc-200 p-2 rounded-lg text-xs outline-none focus:border-primary transition-colors"
                        >
-                         <option value="NexonMaplestory">넥슨 메이플스토리</option>
-                         <option value="ChangwonDanggamAsak">창원단감아삭</option>
-                         <option value="SchoolSafetyNotification">학교안심 알림장</option>
+                         <option value="NexonMaplestory">넥슨 메이플</option>
+                         <option value="ChangwonDanggamAsak">창원단감</option>
+                         <option value="SchoolSafetyNotification">학교알림장</option>
                        </select>
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                       <label className="text-[10px] lg:text-xs font-black text-zinc-400 uppercase">크기 ({frameFontSize}pt)</label>
+                    <div className="flex-1 min-w-[100px] space-y-1.5">
+                       <label className="text-[10px] font-black text-zinc-400 uppercase">크기 ({frameFontSize}pt)</label>
                        <input 
                          type="range" 
                          min="20" max="150" 
                          value={frameFontSize} 
                          onChange={(e) => setFrameFontSize(Number(e.target.value))}
-                         className="w-full accent-primary"
+                         className="w-full accent-primary h-8"
                        />
                     </div>
                     
-                    <div className="space-y-2">
-                       <label className="text-[10px] lg:text-xs font-black text-zinc-400 uppercase block">색상</label>
-                       <div className="flex gap-3">
+                    <div className="flex-1 min-w-[120px] space-y-1.5">
+                       <label className="text-[10px] font-black text-zinc-400 uppercase block">색상</label>
+                       <div className="flex gap-1.5">
                          <button 
                            onClick={() => setFrameTextColor("#000000")}
-                           className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border-2 ${frameTextColor === "#000000" ? 'bg-black text-white border-black' : 'bg-white text-black border-zinc-200'}`}
+                           className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all border ${frameTextColor === "#000000" ? 'bg-black text-white border-black' : 'bg-white text-black border-zinc-200'}`}
                          >
-                           검정색
+                           검정
                          </button>
                          <button 
                            onClick={() => setFrameTextColor("#FFFFFF")}
-                           className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border-2 ${frameTextColor === "#FFFFFF" ? 'bg-zinc-100 text-black border-zinc-300' : 'bg-white text-zinc-400 border-zinc-200'}`}
+                           className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all border ${frameTextColor === "#FFFFFF" ? 'bg-zinc-100 text-black border-zinc-400' : 'bg-white text-zinc-400 border-zinc-200'}`}
                          >
                            흰색
                          </button>
