@@ -42,7 +42,7 @@ export default function PhotoSelector({ selectedSlots, setSelectedSlots }: Photo
           >
             {imageSrc ? (
               <div className="relative w-full h-full">
-                <img src={imageSrc} alt={`slot-${idx}`} className="w-full h-full object-cover" />
+                <img crossOrigin="anonymous" src={imageSrc} alt={`slot-${idx}`} className="w-full h-full object-cover" />
               </div>
             ) : (
               <span className="text-zinc-300 font-bold text-2xl select-none">{idx + 1}</span>

@@ -188,6 +188,16 @@ app.use(cors({
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// 서버 상태 및 버전 확인용 (배포 확인용)
+const APP_VERSION = "2026-04-12-v4-client-ffmpeg-fix";
+app.get("/api/health-check", (req, res) => {
+  res.json({ 
+    status: "ok", 
+    version: APP_VERSION,
+    time: new Date().toISOString()
+  });
+});
+
 let config = {
   intervalSeconds: 6,
   maxShots: 6,
@@ -288,21 +298,26 @@ app.get("/api/download/:filename", (req, res) => {
   if (!filename) return res.status(400).json({ error: "Missing filename" });
 
   const targetPath = path.join(resultDir, filename);
-  const downloadName = req.query.name || filename;
-  const encodedName = encodeURIComponent(downloadName);
+  // 1. 파일명 및 확장자 보정 (끝까지 확장자가 없으면 폴백)
+  let downloadName = req.query.name || "4cut_result";
+  if (!downloadName.includes('.')) {
+    downloadName += filename.endsWith('.mp4') ? '.mp4' : '.jpg';
+  }
 
-  // 다운로드 강제 헤더 설정
-  res.setHeader("Content-Disposition", `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
+  const targetPath = path.join(resultDir, filename);
+
+  // 헤더 설정 (미리 설정 - R2 스트리밍 및 로컬 모두 적용)
   if (filename.endsWith('.mp4')) res.setHeader("Content-Type", "video/mp4");
   else if (filename.endsWith('.jpg')) res.setHeader("Content-Type", "image/jpeg");
 
   if (fs.existsSync(targetPath)) {
-    // 1. 로컬에 있을 때
-    res.sendFile(targetPath);
+    // 1. 로컬에 있을 때 -> res.download가 Content-Disposition을 완벽히 생성해줌
+    return res.download(targetPath, downloadName);
   } else {
-    // 2. 로컬에 없을 때 -> R2에서 스트리밍으로 가져와서 전달 (아이폰에서 저장 기능 보장)
+    // 2. 로컬에 없을 때 -> R2 스트리밍 (수동으로 attachment 설정 필요)
+    res.attachment(downloadName);
     const r2Url = `${R2_PUBLIC_URL}/results/${filename}`;
-    console.log("[Download] Streaming from R2 to force download:", r2Url);
+    console.log("[Download] Streaming from R2 with force name:", downloadName);
     
     https.get(r2Url, (r2Res) => {
       if (r2Res.statusCode !== 200) {
@@ -336,171 +351,37 @@ app.use("/uploads/results", (req, res, next) => {
   next();
 }, express.static(resultDir));
 
-// 비디오 파일들 보관소
 const videoStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, resultDir),
-  filename: (req, file, cb) => cb(null, `vid_${Date.now()}_${Math.random().toString(36).substring(7)}.webm`)
+  filename: (req, file, cb) => {
+    const timestamp = Date.now();
+    const randomSuffix = Math.random().toString(36).substring(7);
+    cb(null, `vid_${timestamp}_${randomSuffix}.mp4`);
+  }
 });
-const uploadVideo = multer({ storage: videoStorage, limits: { fileSize: 100 * 1024 * 1024 } });
 
-// 라이브 멀티그리드 비디오 생성 API
-app.post("/api/save-video", uploadVideo.array("videos", 4), async (req, res) => {
-  console.log("[Video] Received files:", req.files ? req.files.length : 0);
-  if (!req.files || req.files.length !== 4) {
-    console.error("[Video] Expected 4 files, got:", req.files ? req.files.length : 0);
-    return res.status(400).json({ error: "4 videos required, got: " + (req.files ? req.files.length : 0) });
+const uploadSingleVideo = multer({ storage: videoStorage, limits: { fileSize: 100 * 1024 * 1024 } });
+
+// 라이브 멀티그리드 비디오 저장 API (이제 브라우저에서 인코딩되어 옴)
+app.post("/api/save-video", uploadSingleVideo.single("video"), async (req, res) => {
+  if (!req.file) {
+    console.error("[Video] No file uploaded");
+    return res.status(400).json({ error: "No video file uploaded" });
   }
 
-  // 무거운 합성 작업은 대기열(Queue)에 넣어 하나씩 처리합니다.
-  return videoQueue.add(async () => {
-    const frameStr = req.body.frame; 
-    const timestamp = Date.now();
-    const outFilename = `result_vid_${timestamp}.mp4`;
-    const outPath = path.join(__dirname, "uploads/results", outFilename);
-    const tempDir = path.join(__dirname, "uploads/temp");
-
-  let command = ffmpeg();
-  req.files.forEach(f => command.input(f.path));
-
-  const cropFilter = 'hflip,scale=-2:691,crop=465:691,setsar=1';
-  let filterComplex = '';
-  let tempFramePath = ""; // 임시 프레임 파일 경로 보관용
-
-  // 임시 데이터 청소 함수 (메모리 및 용량 관리)
-  const cleanup = () => {
-    if (tempFramePath && fs.existsSync(tempFramePath)) {
-      fs.unlink(tempFramePath, () => console.log("[Cleanup] Temp frame deleted."));
-    }
-  };
-
-  if (frameStr && frameStr.startsWith('#')) {
-    // 단색 프레임일 경우
-    const hex = frameStr.replace('#', '0x');
-    filterComplex = `color=c=${hex}:s=1080x1920:d=4 [bg];`;
-    filterComplex += `[0:v]${cropFilter} [v1];`;
-    filterComplex += `[1:v]${cropFilter} [v2];`;
-    filterComplex += `[2:v]${cropFilter} [v3];`;
-    filterComplex += `[3:v]${cropFilter} [v4];`;
-    filterComplex += `[bg][v1]overlay=63:76:shortest=1[o1];`
-    filterComplex += `[o1][v2]overlay=550:76:shortest=1[o2];`
-    filterComplex += `[o2][v3]overlay=63:789:shortest=1[o3];`
-    filterComplex += `[o3][v4]overlay=550:789:shortest=1[out]`
-
-    command
-      .complexFilter(filterComplex, 'out')
-      .outputOptions([
-        '-c:v', 'libx264', 
-        '-pix_fmt', 'yuv420p', 
-        '-t', '4', 
-        '-shortest',
-        '-preset', 'ultrafast',
-        '-threads', '1',
-        '-crf', '28'
-      ])
-      .save(outPath)
-      .on('start', (cmd) => console.log('[FFmpeg] cmd:', cmd))
-      .on('end', async () => { 
-        console.log('[FFmpeg] Done:', outFilename); 
-        try {
-          const r2Url = await uploadFileToR2(outPath, outFilename);
-          if (!res.headersSent) {
-            res.json({ url: r2Url }); 
-          }
-        } catch (uploadErr) {
-          console.error("[R2 Video Upload Error]", uploadErr);
-          if (!res.headersSent) {
-            res.json({ url: `${getCurrentBaseUrl(req)}/uploads/results/${outFilename}` }); 
-          }
-        }
-      })
-      .on('error', (err) => { 
-        console.error('[FFmpeg] Error:', err.message); 
-        if (!res.headersSent) {
-          res.status(500).json({error: 'encoding failed: ' + err.message}); 
-        }
-      });
-  } else {
-    // 외부 PNG 프레임일 경우 (R2 URL 또는 로컬 경로)
-    let frameInput = "";
-    if (frameStr && frameStr.startsWith("http")) {
-       // [이중 잠금] 클라우드 주소인 경우 로컬 temp 폴더로 선(先) 다운로드
-       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-       tempFramePath = path.join(tempDir, `temp_frame_${timestamp}.png`);
-       try {
-         console.log("[Video] Downloading frame to local cache:", frameStr);
-         frameInput = await downloadFrameTemp(frameStr, tempFramePath);
-       } catch (err) {
-         console.error("[Video] Frame download failed, fallback to white:", err);
-       }
-    } else if (frameStr && frameStr.includes("/external-frames/")) {
-       const parts = frameStr.split("/external-frames/");
-       const localPath = path.join(externalFrameDir, decodeURIComponent(parts[1]));
-       if (fs.existsSync(localPath)) frameInput = localPath;
-    }
+  try {
+    const outFilename = req.file.filename; // 이미 .mp4로 생성됨
+    const outPath = req.file.path;
     
-    // 바탕은 흰색, 영상을 배치한 뒤, 맨 위(5번째 인풋)에 PNG 올리기
-    if (frameInput) {
-       command.input(frameInput).inputOptions('-loop 1'); // 0,1,2,3번은 영상, 4번이 PNG 프레임 (무한 루프 설정)
-       filterComplex = `color=c=white:s=1080x1920:d=4 [base];`;
-       filterComplex += `[0:v]${cropFilter} [v1];`;
-       filterComplex += `[1:v]${cropFilter} [v2];`;
-       filterComplex += `[2:v]${cropFilter} [v3];`;
-       filterComplex += `[3:v]${cropFilter} [v4];`;
-       filterComplex += `[base][v1]overlay=63:76:shortest=1[o1];`;
-       filterComplex += `[o1][v2]overlay=550:76:shortest=1[o2];`;
-       filterComplex += `[o2][v3]overlay=63:789:shortest=1[o3];`;
-       filterComplex += `[o3][v4]overlay=550:789:shortest=1[o4];`;
-       filterComplex += `[o4][4:v]overlay=0:0:shortest=1[out]`;
-    } else {
-       // 프레임 인식 실패시 단순 흰화면 베이스 폴백
-       filterComplex = `color=c=white:s=1080x1920:d=4 [base];`;
-       filterComplex += `[0:v]${cropFilter} [v1];`;
-       filterComplex += `[1:v]${cropFilter} [v2];`;
-       filterComplex += `[2:v]${cropFilter} [v3];`;
-       filterComplex += `[3:v]${cropFilter} [v4];`;
-       filterComplex += `[base][v1]overlay=63:76:shortest=1[o1];`;
-       filterComplex += `[o1][v2]overlay=550:76:shortest=1[o2];`;
-       filterComplex += `[o2][v3]overlay=63:789:shortest=1[o3];`;
-       filterComplex += `[o3][v4]overlay=550:789:shortest=1[out]`;
-    }
-
-    command
-      .complexFilter(filterComplex, 'out')
-      .outputOptions([
-        '-c:v', 'libx264', 
-        '-pix_fmt', 'yuv420p', 
-        '-t', '4', 
-        '-shortest',
-        '-preset', 'ultrafast',
-        '-threads', '1',
-        '-crf', '28'
-      ])
-      .save(outPath)
-      .on('start', (cmd) => console.log('[FFmpeg] cmd:', cmd))
-      .on('end', async () => { 
-        console.log('[FFmpeg] Done:', outFilename); 
-        cleanup(); // 임시 프레임 삭제
-        try {
-          const r2Url = await uploadFileToR2(outPath, outFilename, "results");
-          if (!res.headersSent) {
-            res.json({ url: r2Url }); 
-          }
-        } catch (uploadErr) {
-          console.error("[R2 Video Upload Error]", uploadErr);
-          if (!res.headersSent) {
-            res.json({ url: `${getCurrentBaseUrl(req)}/results/${outFilename}` }); 
-          }
-        }
-      })
-      .on('error', (err) => { 
-        console.error('[FFmpeg] Error:', err.message); 
-        cleanup(); // 에러 발생 시에도 청소
-        if (!res.headersSent) {
-          res.status(500).json({error: 'encoding failed: ' + err.message}); 
-        }
-      });
-    }
-  });
+    console.log(`[Video] Browser-encoded video received: ${outFilename}`);
+    
+    // R2에 업로드
+    const r2Url = await uploadFileToR2(outPath, outFilename, "results");
+    res.json({ url: r2Url, filename: outFilename });
+  } catch (err) {
+    console.error("[Video Save Error]", err);
+    res.status(500).json({ error: "Failed to save video" });
+  }
 });
 
 // 외부 폴더 (external-frames) 정적 서빙 및 목록 조회

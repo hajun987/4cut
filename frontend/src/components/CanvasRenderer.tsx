@@ -124,47 +124,50 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
       let uploadedVideoId = "";
       
       if (mode === 'video') {
-        setLoadingText("4분할 액자 동영상을 렌더링 중입니다 (최대 10초 소요)...");
+        setLoadingText("브라우저에서 영상을 직접 합성 중입니다 (쾌속 모드) 🚀");
         try {
-         const videoFormData = new FormData();
-         videoFormData.append("frame", selectedFrame);
-         
-         // 선택된 슬롯 → 원본 인덱스 → 해당 비디오 매핑
-         let videoCount = 0;
-         selectedSlots.forEach((slotDataUrl, i) => {
+          // 1. 촬영된 비디오 조각들 수집
+          const videoBlobs: Blob[] = [];
+          selectedSlots.forEach((slotDataUrl) => {
             const index = shotImages.indexOf(slotDataUrl);
-            console.log(`[Video] Slot ${i}: shotImages index=${index}, hasVideo=${!!(index !== -1 && shotVideos[index])}, totalVideos=${shotVideos.length}`);
             if (index !== -1 && shotVideos[index]) {
-               videoFormData.append("videos", shotVideos[index], `slot_${i}.webm`);
-               videoCount++;
+              videoBlobs.push(shotVideos[index]);
             }
-         });
+          });
 
-         console.log(`[Video] Total videos to upload: ${videoCount}`);
-         
-         if (videoCount !== 4) {
-            console.warn(`[Video] 비디오 ${videoCount}개만 수집됨. 4개 필요. 영상 생성 건너뜀.`);
-         } else {
-           const videoRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/save-video`, {
+          if (videoBlobs.length !== 4) {
+             console.warn(`[Video] 비디오 ${videoBlobs.length}개만 수집됨. 4개 필요. 영상 생성 건너뜀.`);
+          } else {
+            // 2. 브라우저 엔진(FFmpeg) 인스턴스 확보 및 실행
+            const { composeVideoOnClient } = await import("@/hooks/useFfmpeg");
+            const ffmpeg = (window as any).FFmpegInstance;
+            
+            if (!ffmpeg) throw new Error("FFmpeg 엔진이 로드되지 않았습니다.");
+            
+            const mp4Data = await composeVideoOnClient(ffmpeg, videoBlobs, selectedFrame);
+            const mp4Blob = new Blob([mp4Data as any], { type: 'video/mp4' });
+
+            // 3. 서버에는 이제 완성된 MP4 하나만 전송
+            const videoFormData = new FormData();
+            videoFormData.append("video", mp4Blob, `${Date.now()}.mp4`);
+            
+            const videoRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/save-video`, {
               method: "POST",
               body: videoFormData
-           });
-           
+            });
+            
             if (videoRes.ok) {
               const vData = await videoRes.json();
               uploadedVideoUrl = vData.url;
-              const parts = uploadedVideoUrl.split("/");
-              uploadedVideoId = parts[parts.length - 1];
+              uploadedVideoId = vData.filename;
             } else {
-              const errBody = await videoRes.text();
-              console.error("[Video] Server error:", videoRes.status, errBody);
+              console.error("[Video] Server upload error");
             }
           }
         } catch (e) {
-          console.error("비디오 렌더링 실패:", e);
+          console.error("브라우저 비디오 렌더링 실패:", e);
         }
- 
-        }
+      }
        setLoadingText("완료되었습니다!");
  
        // 자동 다운로드 - 아이폰에서도 재생이 아닌 '파일 저장'이 되도록 서버 API를 사용합니다.

@@ -51,7 +51,7 @@ export default function SharePage({ params }: { params: Promise<{ id: string }> 
         <p className="text-center text-zinc-500 text-sm mb-4">촬영: {timestampStr}</p>
       )}
 
-      <img src={imageUrl} alt="Result" className="w-full rounded-xl shadow-lg border border-zinc-200 mb-4" />
+      <img crossOrigin="anonymous" src={imageUrl} alt="Result" className="w-full rounded-xl shadow-lg border border-zinc-200 mb-4" />
 
       <button 
         onClick={() => doDownload(id, `4cut_photo.jpg`)}

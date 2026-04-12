@@ -23,47 +23,66 @@ export default function Home() {
   const [secretFrameMap, setSecretFrameMap] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<"COLOR" | "DESIGN">("COLOR");
 
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [engineLoaded, setEngineLoaded] = useState(false);
+
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     if (code) setSecretCode(code);
 
-    async function loadInitialData() {
+    async function loadEngine() {
       try {
-        console.log("[Debug] API 호출 시작:", apiUrl);
-        const configRes = await fetch(`${apiUrl}/api/config`);
-        const configData = await configRes.json();
-        console.log("[Debug] 전체 설정 데이터:", configData);
-        
-        const secretMap = configData.secretFrames || {};
-        setSecretFrameMap(secretMap);
+        const { FFmpeg } = await import("@ffmpeg/ffmpeg");
+        const { toBlobURL } = await import("@ffmpeg/util");
+        const ffmpeg = new (window as any).FFmpegInstance || new FFmpeg();
+        (window as any).FFmpegInstance = ffmpeg;
 
-        // 파일명으로 매칭하는 헬퍼 함수
-        const getFilename = (url: string) => url.split('/').pop() || "";
-
-        if (code && secretMap[code]) {
-          console.log("[Debug] 비밀 코드 감지:", code);
-          setSelectedFrame(secretMap[code].trim());
+        if (ffmpeg.loaded) {
+          setEngineLoaded(true);
+          return;
         }
 
-        const framesRes = await fetch(`${apiUrl}/api/frames-list`);
-        const allFrames = await framesRes.json();
-        
-        if (Array.isArray(allFrames)) {
-          // 파일명 리스트로 만들어서 더 강력하게 필터링 (도메인이 달라도 파일명이 같으면 필터링)
-          const secretFilenames = Object.values(secretMap).map((url: any) => getFilename(url.trim()));
-          console.log("[Debug] 비밀 프레임 파일명들:", secretFilenames);
+        ffmpeg.on("log", ({ message }: { message: string }) => {
+          console.log("[FFmpeg Log]", message);
+        });
 
-          const filtered = allFrames.filter(url => !secretFilenames.includes(getFilename(url.trim())));
-          console.log("[Debug] 필터링된 프레임 목록:", filtered);
-          setExternalFrames(filtered);
-        }
+        // 로딩 진행률 추적 (가상의 진행률 시뮬레이션 및 데이터 로드 병행)
+        const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+        });
+        
+        setEngineLoaded(true);
       } catch (err) {
-        console.error("[Debug] 데이터 로드 중 치명적 오류:", err);
+        console.error("FFmpeg 엔진 로드 실패:", err);
       }
     }
 
+    async function loadInitialData() {
+      // ... (기존 데이터 로딩 로직)
+      try {
+        const configRes = await fetch(`${apiUrl}/api/config`);
+        const configData = await configRes.json();
+        const secretMap = configData.secretFrames || {};
+        setSecretFrameMap(secretMap);
+        const getFilename = (url: string) => url.split('/').pop() || "";
+        if (code && secretMap[code]) setSelectedFrame(secretMap[code].trim());
+        const framesRes = await fetch(`${apiUrl}/api/frames-list`);
+        const allFrames = await framesRes.json();
+        if (Array.isArray(allFrames)) {
+          const secretFilenames = Object.values(secretMap).map((url: any) => getFilename(url.trim()));
+          const filtered = allFrames.filter(url => !secretFilenames.includes(getFilename(url.trim())));
+          setExternalFrames(filtered);
+        }
+      } catch (err) {
+        console.error("데이터 로드 오류:", err);
+      }
+    }
+
+    loadEngine();
     loadInitialData();
   }, []);
 
@@ -77,12 +96,21 @@ export default function Home() {
           </h1>
           <p className="text-zinc-500 font-medium mb-12 text-xl">가장 빛나는 오늘의 모습을 남겨보세요 ✨</p>
           
-          <button 
-            onClick={() => setStep("SHOOTING")}
-            className="px-16 py-6 bg-primary text-white text-3xl font-black rounded-full shadow-[0_15px_30px_rgba(255,71,133,0.4)] transition-transform hover:scale-110 active:scale-95"
-          >
-            시작하기
-          </button>
+          {engineLoaded ? (
+            <button 
+              onClick={() => setStep("SHOOTING")}
+              className="px-16 py-6 bg-primary text-white text-3xl font-black rounded-full shadow-[0_15px_30px_rgba(255,71,133,0.4)] transition-transform hover:scale-110 active:scale-95 animate-in zoom-in duration-500"
+            >
+              시작하기
+            </button>
+          ) : (
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-64 h-3 bg-zinc-100 rounded-full overflow-hidden relative">
+                <div className="absolute inset-0 bg-primary animate-pulse w-full origin-left translate-x-[-50%]" />
+              </div>
+              <p className="text-primary font-bold animate-pulse text-lg">엔진 예열 중... 🔥</p>
+            </div>
+          )}
         </div>
         <a href="/admin" className="absolute bottom-6 right-8 text-[8px] font-semibold text-zinc-300 hover:text-zinc-500 z-50 transition-colors">
           Admin
@@ -133,7 +161,7 @@ export default function Home() {
                 <path fill={selectedFrame} fillRule="evenodd" d="M 0 0 H 1080 V 1920 H 0 Z M 65 78 H 528 V 767 H 65 Z M 552 78 H 1015 V 767 H 552 Z M 65 791 H 528 V 1480 H 65 Z M 552 791 H 1015 V 1480 H 552 Z" />
               </svg>
             ) : (
-              <img src={selectedFrame} alt="frame overlay" className="absolute inset-0 w-full h-full object-cover pointer-events-none z-10" />
+              <img crossOrigin="anonymous" src={selectedFrame} alt="frame overlay" className="absolute inset-0 w-full h-full object-cover pointer-events-none z-10" />
             )}
           </div>
         </div>
@@ -171,6 +199,7 @@ export default function Home() {
                 return (
                   <div key={idx} className="relative group flex-shrink-0 lg:flex-shrink">
                     <img 
+                      crossOrigin="anonymous"
                       src={shot} 
                       alt={`shot ${idx + 1}`} 
                       className={`w-20 lg:w-40 aspect-[463/689] object-cover cursor-pointer rounded-lg lg:rounded-xl shadow-md border-2 lg:border-4 border-white transition-all 
@@ -243,7 +272,7 @@ export default function Home() {
               </div>
               <div className={`${activeTab === "DESIGN" ? "flex" : "hidden md:hidden"} lg:flex gap-3 mt-0 lg:mt-6`}>
                 {externalFrames.map((url, idx) => (
-                  <button key={idx} onClick={() => setSelectedFrame(url)} className={`w-16 lg:w-32 aspect-[1080/1920] rounded-md lg:rounded-xl shadow-md border-2 lg:border-4 flex-shrink-0 overflow-hidden ${selectedFrame === url ? 'border-primary' : 'border-zinc-200'}`}><img src={url} className="w-full h-full object-cover" /></button>
+                  <button key={idx} onClick={() => setSelectedFrame(url)} className={`w-16 lg:w-32 aspect-[1080/1920] rounded-md lg:rounded-xl shadow-md border-2 lg:border-4 flex-shrink-0 overflow-hidden ${selectedFrame === url ? 'border-primary' : 'border-zinc-200'}`}><img crossOrigin="anonymous" src={url} className="w-full h-full object-cover" /></button>
                 ))}
               </div>
             </div>

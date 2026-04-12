@@ -35,6 +35,7 @@ export default function ResultQR({ url, imagePreview, imageId, videoId }: Result
         {imagePreview && (
           <div className="flex-[2] lg:flex-1 flex justify-center w-full min-h-[50dvh] lg:min-h-0">
             <img 
+              crossOrigin="anonymous"
               src={imagePreview} 
               alt="Final Preview" 
               className="w-full max-w-sm lg:max-w-md rounded-xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] object-contain border-2 border-white/10"
