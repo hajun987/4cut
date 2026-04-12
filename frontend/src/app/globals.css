@@ -58,3 +58,12 @@ html, body {
 .animate-flash {
   animation: flash 0.15s ease-out forwards;
 }
+
+/* 스크롤바 숨기기 유틸리티 (가로 스크롤 등에 사용) */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE, Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}

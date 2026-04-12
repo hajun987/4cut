@@ -212,100 +212,77 @@ export default function WebcamCapture({ onCapture, isCapturing, setIsCapturing, 
   };
 
   return (
-    <div className="relative w-full h-[100dvh] flex flex-row items-center justify-center bg-zinc-50 overflow-hidden">
+    <div className="relative w-full h-[100dvh] flex flex-col lg:flex-row items-center justify-center bg-zinc-50 overflow-hidden py-4 lg:py-0">
       
-      {/* 
-        정중앙에 위치하는 카메라 메인 영역 컴테이너 (overflow-hidden 없음)
-        이 래퍼를 기준으로 우측에 버튼이 상대적으로(absolute) 달라붙습니다.
-      */}
-      <div className="relative h-[95%] aspect-[463/689] mx-auto flex-shrink-0 z-10">
+      {/* 카메라와 안내 패널을 감싸는 컨테이너 */}
+      <div className="relative flex flex-col lg:flex-row items-center justify-center gap-4 lg:gap-0">
         
-        {/* 카메라 실제 화면부 (둥근 모서리와 크롭을 위해 overflow-hidden 적용) */}
-        <div className="absolute inset-0 rounded-2xl overflow-hidden bg-white shadow-xl border-8 border-white pointer-events-none z-10">
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted 
-            className="w-full h-full object-cover transform -scale-x-100" 
-          />
-          
-          {countdown !== null && (
-            <div className="absolute top-[20%] w-full flex items-center justify-center transition-none z-20">
-              <span 
-                className="text-[8.4rem] font-black text-white select-none drop-shadow-2xl"
-                style={{
-                  textShadow: '4px 4px 0 #FF4785, -2px -2px 0 #FF4785, 2px -2px 0 #FF4785, -2px 2px 0 #FF4785, 2px 2px 0 #FF4785'
-                }}
-              >
-                {countdown}
-              </span>
-            </div>
-          )}
-
-          {showFlash && (
-            <div className="absolute inset-0 bg-white z-30 animate-flash pointer-events-none" />
-          )}
-          
-          <canvas ref={canvasRef} className="hidden" />
-        </div>
-
-        {/* 좌측 말풍선 툴팁 컨테이너 */}
-        <div className="absolute top-1/2 -left-12 transform -translate-x-full -translate-y-1/2 z-20 pointer-events-none hidden lg:block">
-          <div className="relative bg-white px-8 py-8 rounded-3xl shadow-[0_20px_50px_rgba(255,71,133,0.15)] border-4 border-primary text-right whitespace-nowrap">
-            {/* 꼬리 (Triangle) */}
-            <div className="absolute top-1/2 -right-6 transform -translate-y-1/2 w-0 h-0 border-y-[12px] border-y-transparent border-l-[24px] border-l-primary"></div>
-            <div className="absolute top-1/2 -right-[1.1rem] transform -translate-y-1/2 w-0 h-0 border-y-[9px] border-y-transparent border-l-[18px] border-l-white"></div>
-            
-            <p className="text-2xl font-black mb-3 text-primary tracking-tight">안내사항 💡</p>
-            <p className="text-xl font-bold text-zinc-700 leading-relaxed">
-              <span className="text-primary font-black">{intervalSeconds}초마다</span> 자동 촬영되며,
-            </p>
-            <p className="text-xl font-bold text-zinc-700 leading-relaxed mb-4">
-              총 <span className="text-primary font-black">{maxShots}컷</span>을 찍습니다.
-            </p>
-            <p className="text-zinc-500 font-medium whitespace-pre-wrap leading-snug">
-              그 중 마음에 드는 최고 컷 4장을<br/>직접 고를 수 있어요!
-            </p>
+        {/* 1. 카메라 메인 영역 */}
+        <div className="relative aspect-[463/689] h-[45dvh] lg:h-[95dvh] flex-shrink-0 z-10 shadow-2xl">
+          <div className="absolute inset-0 rounded-2xl overflow-hidden bg-white shadow-xl border-4 lg:border-8 border-white pointer-events-none z-10">
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              className="w-full h-full object-cover transform -scale-x-100" 
+            />
+            {countdown !== null && (
+              <div className="absolute top-[20%] w-full flex items-center justify-center transition-none z-20">
+                <span className="text-6xl lg:text-[8.4rem] font-black text-white select-none drop-shadow-2xl" style={{ textShadow: '4px 4px 0 #FF4785, -2px -2px 0 #FF4785, 2px -2px 0 #FF4785, -2px 2px 0 #FF4785, 2px 2px 0 #FF4785' }}>
+                  {countdown}
+                </span>
+              </div>
+            )}
+            {showFlash && <div className="absolute inset-0 bg-white z-30 animate-flash pointer-events-none" />}
+            <canvas ref={canvasRef} className="hidden" />
           </div>
         </div>
 
-        {/* 
-          우측 진행/대기 알림 패널
-        */}
-        <div className="absolute top-1/2 -right-12 transform translate-x-full -translate-y-1/2 z-20 pointer-events-auto">
-          {!isCapturing ? (
-             <div className="bg-white rounded-3xl border-4 border-zinc-200 shadow-[0_10px_30px_rgba(0,0,0,0.05)] p-8 text-center min-w-[240px]">
-               {setupCountdown !== null ? (
-                 <>
-                   <div className="text-7xl font-black text-primary mb-2 tracking-tighter">{setupCountdown}</div>
-                   <div className="text-xl font-bold text-zinc-600">초 뒤 자동 시작</div>
-                 </>
-               ) : (
-                 <div className="text-xl font-bold text-zinc-400 animate-pulse">준비 중...</div>
-               )}
-             </div>
-          ) : (
-             <div className="bg-white px-8 py-6 rounded-3xl border-[6px] border-primary shadow-[0_15px_40px_rgba(255,71,133,0.3)] min-w-[320px] text-center flex flex-col items-center justify-center">
-              <span className="text-zinc-500 font-bold mb-2">총 {maxShots}장 중</span>
-              <span className="text-3xl font-black text-black">
-                {shotCount >= maxShots ? (
-                  <span className="text-primary tracking-tight font-black block mt-1">
-                    촬영 완료! 👏
-                  </span>
-                ) : (
-                  <>
-                    <span className="text-primary tracking-tight block">"{shotCount + 1}번째 사진"</span>
-                    <span className="block mt-2">찍는 중 📸</span>
-                  </>
-                )}
-              </span>
+        {/* 2. 안내 및 진행 패널 (카메라 밖으로 탈출) */}
+        <div className="flex flex-col lg:contents order-2 lg:order-none z-20 pointer-events-auto">
+          
+          {/* 안내사항 말풍선 */}
+          <div className="lg:absolute lg:top-1/2 lg:-left-12 lg:transform lg:-translate-x-full lg:-translate-y-1/2 w-full max-w-[280px] lg:max-w-none px-4 lg:px-0">
+            <div className="relative bg-white px-4 py-3 lg:px-8 lg:py-8 rounded-2xl lg:rounded-3xl shadow-lg border-2 lg:border-4 border-primary text-center lg:text-right">
+              <p className="text-sm lg:text-2xl font-black text-primary mb-1 tracking-tight">안내사항 💡</p>
+              <p className="text-xs lg:text-xl font-bold text-zinc-700">
+                <span className="text-primary font-black">{intervalSeconds}초마다</span> 자동 촬영,
+                총 <span className="text-primary font-black">{maxShots}컷</span>
+              </p>
             </div>
-          )}
+          </div>
+
+          {/* 진행/대기 알림 패널 */}
+          <div className="lg:absolute lg:top-1/2 lg:-right-12 lg:transform lg:translate-x-full lg:-translate-y-1/2 w-full max-w-[280px] lg:max-w-none px-4 lg:px-0 flex justify-center mt-2 lg:mt-0">
+            {!isCapturing ? (
+               <div className="bg-white rounded-2xl lg:rounded-3xl border-2 lg:border-4 border-zinc-200 shadow-md p-3 lg:p-8 text-center min-w-[150px] lg:min-w-[240px] w-full lg:w-auto">
+                 {setupCountdown !== null ? (
+                   <>
+                     <div className="text-3xl lg:text-7xl font-black text-primary tracking-tighter">{setupCountdown}</div>
+                     <div className="text-[10px] lg:text-xl font-bold text-zinc-600">초 뒤 시작</div>
+                   </>
+                 ) : (
+                   <div className="text-xs lg:text-xl font-bold text-zinc-400 animate-pulse">준비 중...</div>
+                 )}
+               </div>
+            ) : (
+               <div className="bg-white px-5 py-3 lg:px-8 lg:py-6 rounded-2xl lg:rounded-3xl border-2 lg:border-[6px] border-primary shadow-xl min-w-[200px] lg:min-w-[320px] w-full lg:w-auto text-center flex flex-col items-center justify-center">
+                <span className="text-zinc-500 font-bold text-[10px] lg:text-base">총 {maxShots}장 중</span>
+                <span className="text-base lg:text-3xl font-black text-zinc-900">
+                  {shotCount >= maxShots ? (
+                    <span className="text-primary tracking-tight font-black block">촬영 완료! 👏</span>
+                  ) : (
+                    <>
+                      <span className="text-primary tracking-tight">"{shotCount + 1}번째"</span> 찍는 중 📸
+                    </>
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
-
       </div>
-
     </div>
   );
 }

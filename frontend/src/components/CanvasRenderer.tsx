@@ -221,21 +221,13 @@ export default function CanvasRenderer({ selectedSlots, selectedFrame, shotImage
         </div>
       )}
 
-      <div className="flex flex-col gap-4 w-full max-w-md px-6">
-        <button
-          onClick={() => handleComplete('photo')}
-          disabled={isProcessing}
-          className="px-8 py-5 text-xl font-black rounded-2xl bg-white text-black border-2 border-zinc-200 shadow-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-        >
-          {isProcessing ? "처리 중..." : "📸 사진만 받기 (초고속)"}
-        </button>
-
+      <div className="flex flex-col gap-3 w-full max-w-md px-4 lg:px-6">
         <button
           onClick={() => handleComplete('video')}
           disabled={isProcessing}
-          className="px-8 py-6 text-2xl font-black rounded-2xl bg-primary text-white shadow-2xl shadow-primary/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+          className="px-8 py-4 lg:py-6 text-xl lg:text-2xl font-black rounded-full bg-primary text-white shadow-xl shadow-primary/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
         >
-          {isProcessing ? "작업 중..." : "🎞️ 사진 + 영상 모두 받기"}
+          {isProcessing ? "작업 중..." : "✨ 네컷사진 받기"}
         </button>
       </div>
     </>

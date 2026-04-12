@@ -228,12 +228,16 @@ app.get("/api/config", (req, res) => {
   });
 });
 app.post("/api/config", async (req, res) => {
-  if (req.body.intervalSeconds) config.intervalSeconds = req.body.intervalSeconds;
-  if (req.body.maxShots) config.maxShots = req.body.maxShots;
-  if (req.body.readySeconds) config.readySeconds = req.body.readySeconds;
+  const { intervalSeconds, maxShots, readySeconds, secretFrames, frameUrl } = req.body;
+  
+  if (intervalSeconds !== undefined) config.intervalSeconds = Number(intervalSeconds);
+  if (maxShots !== undefined) config.maxShots = Number(maxShots);
+  if (readySeconds !== undefined) config.readySeconds = Number(readySeconds);
+  if (secretFrames !== undefined) config.secretFrames = secretFrames;
+  if (frameUrl !== undefined) config.frameUrl = frameUrl;
   
   await saveConfigToR2(); // R2에 즉시 영구 저장
-  res.json(config);
+  res.json({ success: true, config });
 });
 
 /**
