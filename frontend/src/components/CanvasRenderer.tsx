@@ -40,73 +40,8 @@ export default function CanvasRenderer({
     setLoadingText(mode === 'photo' ? "사진 전용 결과물을 저장 중입니다..." : "서버에서 사진과 영상을 합성 중입니다...");
 
     try {
-      // 폰트가 완전히 로드될 때까지 대기
+      // 폰트 준비 상태 최종 확인
       await document.fonts.ready;
-
-      // 1. 사전 렌더링: 컬러 프레임일 경우 텍스트 포함 프레임 생성 (JPG/FFmpeg 공용)
-      let renderedFrameDataUrl = "";
-      if (selectedFrame.startsWith("#")) {
-        const textCanvas = document.createElement("canvas");
-        textCanvas.width = 1080;
-        textCanvas.height = 1920;
-        const tCtx = textCanvas.getContext("2d");
-        if (tCtx) {
-          // 사진이 들어갈 자리를 비워두고 배경색 채우기 (Even-Odd Fill)
-          const coordinates = [
-            { x: 63, y: 76, w: 467, h: 693 },
-            { x: 550, y: 76, w: 467, h: 693 },
-            { x: 63, y: 789, w: 467, h: 693 },
-            { x: 550, y: 789, w: 467, h: 693 },
-          ];
-
-          tCtx.fillStyle = selectedFrame;
-          tCtx.beginPath();
-          tCtx.rect(0, 0, 1080, 1920); // 전체 배경
-          coordinates.forEach(c => {
-            tCtx.rect(c.x, c.y, c.w, c.h); // 사진 구멍
-          });
-          tCtx.fill('evenodd');
-          
-          try {
-            if (frameText && frameFont) {
-              // 폰트가 실제로 가용할 때까지 로드 대기
-              await document.fonts.load(`bold ${frameFontSize * 1.5}px ${frameFont}`);
-              await document.fonts.ready;
-            }
-          } catch (e) {
-            console.warn("폰트 로드 실패:", e);
-          }
-
-          if (frameText) {
-            const lines = frameText.split("\n");
-            const fontSizePx = frameFontSize * 1.5;
-            const lineHeight = fontSizePx * 1.2;
-            const totalHeight = lineHeight * lines.length;
-            
-            tCtx.font = `bold ${fontSizePx}px ${frameFont}, sans-serif`;
-            tCtx.fillStyle = frameTextColor;
-            tCtx.textAlign = "center";
-            tCtx.textBaseline = "middle";
-            
-            const startY = 1700 - (totalHeight / 2) + (lineHeight / 2);
-            lines.forEach((line, i) => {
-              tCtx.fillText(line, 540, startY + (lineHeight * i));
-            });
-          }
-          
-          renderedFrameDataUrl = textCanvas.toDataURL("image/png");
-        }
-      }
-
-      // 2. 메인 사진 합성 (JPG용)
-      const canvas = document.createElement("canvas");
-      canvas.width = 1080;
-      canvas.height = 1920;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("캔버스 생성 실패");
-      
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(0, 0, 1080, 1920);
 
       const coordinates = [
         { x: 63, y: 76, w: 467, h: 693 },
@@ -115,45 +50,98 @@ export default function CanvasRenderer({
         { x: 550, y: 789, w: 467, h: 693 },
       ];
 
+      // 폰트 스타일 유틸리티
+      const getFontSpec = (size: number) => {
+        const weight = (frameFont === "ChangwonDanggamAsak") ? "normal" : "700";
+        return `${weight} ${size}px "${frameFont}", sans-serif`;
+      };
+
+      // 1. 영상용 배경 프레임 생성 (FFmpeg용: 구멍 뚫린 PNG)
+      let renderedFrameDataUrl = "";
+      if (selectedFrame.startsWith("#")) {
+        const textCanvas = document.createElement("canvas");
+        textCanvas.width = 1080;
+        textCanvas.height = 1920;
+        const tCtx = textCanvas.getContext("2d");
+        if (tCtx) {
+          tCtx.fillStyle = selectedFrame;
+          tCtx.beginPath();
+          tCtx.rect(0, 0, 1080, 1920);
+          coordinates.forEach(c => tCtx.rect(c.x, c.y, c.w, c.h));
+          tCtx.fill('evenodd');
+          
+          if (frameText && frameFont) {
+            const fontSizePx = frameFontSize * 1.5;
+            const lineHeight = fontSizePx * 1.2;
+            const lines = frameText.split("\n");
+            tCtx.font = getFontSpec(fontSizePx);
+            tCtx.fillStyle = frameTextColor;
+            tCtx.textAlign = "center";
+            tCtx.textBaseline = "middle";
+            const startY = 1700 - ((lineHeight * lines.length) / 2) + (lineHeight / 2);
+            lines.forEach((line, i) => {
+              tCtx.fillText(line, 540, startY + (lineHeight * i));
+            });
+          }
+          renderedFrameDataUrl = textCanvas.toDataURL("image/png");
+        }
+      }
+
+      // 2. 메인 사진 합성 (JPG용: 가장 확실한 선형 렌더링)
+      const canvas = document.createElement("canvas");
+      canvas.width = 1080;
+      canvas.height = 1920;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("캔버스 생성 실패");
+      
+      // 배경색 칠하기
+      ctx.fillStyle = selectedFrame.startsWith("#") ? selectedFrame : "#FFFFFF";
+      ctx.fillRect(0, 0, 1080, 1920);
+
+      // 사진 4장 그리기
       for (let i = 0; i < 4; i++) {
         const slot = selectedSlots[i];
         if (slot) {
           try {
             const img = await loadImage(slot);
             ctx.drawImage(img, coordinates[i].x, coordinates[i].y, coordinates[i].w, coordinates[i].h);
-          } catch {
-            console.error("사진 로드 실패:", i);
+          } catch (e) {
+            console.error(`${i+1}번 사진 로드 실패`, e);
           }
         }
       }
 
-      if (selectedFrame.startsWith("#")) {
-        // [수정] 위에서 구멍을 뚫어 생성한 renderedFrameDataUrl을 사진 위에 겹침
-        try {
-          if (renderedFrameDataUrl) {
-            const frameImg = await loadImage(renderedFrameDataUrl);
-            ctx.drawImage(frameImg, 0, 0, 1080, 1920);
-          }
-        } catch (e) {
-          console.warn("컬러 프레임 합성 실패 (fallback 사용):", e);
-          ctx.fillStyle = selectedFrame;
-          ctx.beginPath();
-          ctx.rect(0, 0, 1080, 1920);
-          coordinates.forEach(c => ctx.rect(c.x, c.y, c.w, c.h));
-          ctx.fill('evenodd');
-        }
-      } else {
+      // 디자인 프레임(PNG)이 있는 경우 덮어씌움
+      if (!selectedFrame.startsWith("#")) {
         try {
           let frameUrl = selectedFrame;
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
           if (!selectedFrame.startsWith("blob:") && !selectedFrame.startsWith("data:") && !selectedFrame.includes("/api/proxy-image")) {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
             frameUrl = `${apiUrl}/api/proxy-image?url=${encodeURIComponent(selectedFrame)}`;
           }
           const frameImg = await loadImage(frameUrl);
           ctx.drawImage(frameImg, 0, 0, 1080, 1920);
         } catch (e) {
-          console.warn("디자인 프레임 로드 실패:", e);
+          console.warn("디자인 프레임 로드 실패", e);
         }
+      }
+
+      // 텍스트 직접 합성 (컬러 프레임일 때만)
+      if (selectedFrame.startsWith("#") && frameText) {
+        const fontSizePx = frameFontSize * 1.5;
+        const lineHeight = fontSizePx * 1.2;
+        const lines = frameText.split("\n");
+        ctx.font = getFontSpec(fontSizePx);
+        ctx.fillStyle = frameTextColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const startY = 1700 - ((lineHeight * lines.length) / 2) + (lineHeight / 2);
+        
+        // 텍스트가 확실히 렌더링되도록 보장하기 위해 폰트 로드 재확인
+        await document.fonts.load(ctx.font);
+        lines.forEach((line, i) => {
+          ctx.fillText(line, 540, startY + (lineHeight * i));
+        });
       }
 
       const finalDataUrl = canvas.toDataURL("image/jpeg", 0.95);
@@ -269,6 +257,13 @@ export default function CanvasRenderer({
         >
           {isProcessing ? "작업 중..." : "✨ 네컷사진 받기"}
         </button>
+      </div>
+
+      {/* 폰트 사전 로드 방지 (Pre-warming) */}
+      <div className="fixed bottom-0 left-0 opacity-0 pointer-events-none -z-10 h-0 overflow-hidden select-none">
+        <span style={{ fontFamily: 'NexonMaplestory' }}>폰트 로드</span>
+        <span style={{ fontFamily: 'ChangwonDanggamAsak' }}>폰트 로드</span>
+        <span style={{ fontFamily: 'SchoolSafetyNotification' }}>폰트 로드</span>
       </div>
     </>
   );
