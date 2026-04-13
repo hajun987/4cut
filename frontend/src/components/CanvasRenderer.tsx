@@ -40,9 +40,12 @@ export default function CanvasRenderer({
     setLoadingText(mode === 'photo' ? "사진 전용 결과물을 저장 중입니다..." : "서버에서 사진과 영상을 합성 중입니다...");
 
     try {
-      // 1. 사전 렌더링: 컬러 프레임일 경우 텍스트 포함 프레임 생성 (FFmpeg 배경용)
+      // 폰트가 완전히 로드될 때까지 대기
+      await document.fonts.ready;
+
+      // 1. 사전 렌더링: 컬러 프레임일 경우 텍스트 포함 프레임 생성 (JPG/FFmpeg 공용)
       let renderedFrameDataUrl = "";
-      if (selectedFrame.startsWith("#") && frameText) {
+      if (selectedFrame.startsWith("#")) {
         const textCanvas = document.createElement("canvas");
         textCanvas.width = 1080;
         textCanvas.height = 1920;
@@ -52,25 +55,29 @@ export default function CanvasRenderer({
           tCtx.fillRect(0, 0, 1080, 1920);
           
           try {
-            await document.fonts.load(`bold ${frameFontSize * 1.5}px ${frameFont}`);
+            if (frameText && frameFont) {
+              await document.fonts.load(`bold ${frameFontSize * 1.5}px ${frameFont}`);
+            }
           } catch (e) {
             console.warn("폰트 로드 실패:", e);
           }
 
-          const lines = frameText.split("\n");
-          const fontSizePx = frameFontSize * 1.5;
-          const lineHeight = fontSizePx * 1.2;
-          const totalHeight = lineHeight * lines.length;
-          
-          tCtx.font = `bold ${fontSizePx}px ${frameFont}, sans-serif`;
-          tCtx.fillStyle = frameTextColor;
-          tCtx.textAlign = "center";
-          tCtx.textBaseline = "middle";
-          
-          const startY = 1700 - (totalHeight / 2) + (lineHeight / 2);
-          lines.forEach((line, i) => {
-            tCtx.fillText(line, 540, startY + (lineHeight * i));
-          });
+          if (frameText) {
+            const lines = frameText.split("\n");
+            const fontSizePx = frameFontSize * 1.5;
+            const lineHeight = fontSizePx * 1.2;
+            const totalHeight = lineHeight * lines.length;
+            
+            tCtx.font = `bold ${fontSizePx}px ${frameFont}, sans-serif`;
+            tCtx.fillStyle = frameTextColor;
+            tCtx.textAlign = "center";
+            tCtx.textBaseline = "middle";
+            
+            const startY = 1700 - (totalHeight / 2) + (lineHeight / 2);
+            lines.forEach((line, i) => {
+              tCtx.fillText(line, 540, startY + (lineHeight * i));
+            });
+          }
           
           renderedFrameDataUrl = textCanvas.toDataURL("image/png");
         }
@@ -106,24 +113,23 @@ export default function CanvasRenderer({
       }
 
       if (selectedFrame.startsWith("#")) {
-        // [수정] 이미 위에서 텍스트가 포함된 renderedFrameDataUrl을 만들었으므로, 그것을 배경으로 사용
+        // [수정] 위에서 만든 renderedFrameDataUrl을 JPG 배경으로도 사용하여 텍스트 누락 방지 및 로직 일원화
         try {
           if (renderedFrameDataUrl) {
             const frameImg = await loadImage(renderedFrameDataUrl);
             ctx.drawImage(frameImg, 0, 0, 1080, 1920);
-          } else {
-            // 텍스트가 없는 경우 기본 색상만
-            ctx.fillStyle = selectedFrame;
-            ctx.beginPath();
-            ctx.rect(0, 0, 1080, 1920);
-            ctx.rect(64, 77, 465, 691);
-            ctx.rect(551, 77, 465, 691);
-            ctx.rect(64, 790, 465, 691);
-            ctx.rect(551, 790, 465, 691);
-            ctx.fill('evenodd');
           }
         } catch (e) {
           console.warn("컬러 프레임 합성 실패:", e);
+          // 극단적인 예외 상황 시 최소한의 배경이라도 채움
+          ctx.fillStyle = selectedFrame;
+          ctx.beginPath();
+          ctx.rect(0, 0, 1080, 1920);
+          ctx.rect(64, 77, 465, 691);
+          ctx.rect(551, 77, 465, 691);
+          ctx.rect(64, 790, 465, 691);
+          ctx.rect(551, 790, 465, 691);
+          ctx.fill('evenodd');
         }
       } else {
         try {
@@ -228,11 +234,19 @@ export default function CanvasRenderer({
   return (
     <>
       {isProcessing && (
-        <div className="fixed inset-0 bg-black/80 z-[100] flex flex-col items-center justify-center text-white pb-20 fade-in">
-          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-8"></div>
-          <h2 className="text-3xl font-black mb-4 tracking-tight">네컷 사진이 만들어지고 있어요 📸</h2>
-          <p className="text-xl text-zinc-300 font-bold mb-8">잠시만 기다려주세요...</p>
-          <p className="text-sm font-bold text-zinc-400 animate-pulse">{loadingText}</p>
+        <div className="fixed inset-0 bg-black/80 z-[100] flex flex-col items-center justify-center text-white pb-20 fade-in backdrop-blur-sm">
+          <div className="relative mb-12">
+            <div className="w-20 h-20 border-4 border-white/20 rounded-full"></div>
+            <div className="absolute top-0 left-0 w-20 h-20 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          </div>
+          <h2 className="text-3xl lg:text-4xl font-black mb-4 tracking-tighter">네컷 사진이 만들어지는 중 ✨</h2>
+          <p className="text-lg lg:text-xl text-zinc-400 font-bold mb-10">오늘의 추억을 예쁘게 담고 있어요.</p>
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-sm font-black text-primary animate-pulse uppercase tracking-widest">{loadingText}</p>
+            <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden">
+               <div className="h-full bg-primary animate-progress-loading"></div>
+            </div>
+          </div>
         </div>
       )}
 

@@ -5,6 +5,13 @@
   --font-mono: var(--font-geist-mono);
   --color-primary: #FF4785;
   --color-primary-hover: #ff216c;
+
+  --animate-progress-loading: progress-loading 2s infinite linear;
+
+  @keyframes progress-loading {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
 }
 
 :root {

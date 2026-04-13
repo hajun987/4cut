@@ -30,6 +30,7 @@ export default function WebcamCapture({
   const [shotCount, setShotCount] = useState(0);
 
   const [setupCountdown, setSetupCountdown] = useState<number | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
   const startLoopRef = useRef<(() => void) | null>(null);
   const isExecutionLocked = useRef(false);
 
@@ -38,43 +39,50 @@ export default function WebcamCapture({
   });
 
   useEffect(() => {
+    // 1. 카운트다운 즉시 시작 (서버 응답을 기다리지 않음)
     let rc = initialReadySeconds !== undefined ? initialReadySeconds : 10;
     let timerId: NodeJS.Timeout | null = null;
     let isMounted = true;
 
+    const startCountdown = (startVal: number) => {
+      if (startVal <= 0) {
+        setSetupCountdown(null);
+        setTimeout(() => { if (startLoopRef.current) startLoopRef.current(); }, 0);
+        return;
+      }
+
+      setSetupCountdown(startVal);
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(() => {
+        setSetupCountdown(prev => {
+          if (prev === null) return null;
+          if (prev <= 1) {
+            if (timerId) clearInterval(timerId);
+            setTimeout(() => { if (startLoopRef.current) startLoopRef.current(); }, 0);
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    };
+
+    // 즉시 시작
+    startCountdown(rc);
+
+    // 2. 서버 설정 백그라운드 로드
     fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/config`)
       .then(res => res.json())
       .then(data => {
         if (!isMounted) return;
-        // Props(URL)로 전달된 값이 없을 때만 서버 설정을 따름
+        // Props로 전달된 값이 없을 때만 서버 설정을 업데이트
         if (!initialMaxShots && data.maxShots) setMaxShots(data.maxShots);
         if (!initialIntervalSeconds && data.intervalSeconds) setIntervalSeconds(data.intervalSeconds);
-        if (!initialReadySeconds && data.readySeconds !== undefined) {
-          setReadySeconds(data.readySeconds);
-          rc = data.readySeconds;
-        }
+        
+        // 만약 setupCountdown이 아직 진행 중이고, Props로 받은 준비 시간이 없었다면 
+        // 서버에서 온 준비 시간으로 재조정할 수도 있으나, 혼선을 줄이기 위해 이미 시작된 카운트다운은 유지하는 것이 안전할 수 있음.
+        // 여기서는 위에서 이미 startCountdown(rc)를 호출했으므로 추가 조정은 생략하거나 필요 시에만 수행.
       })
-      .catch(e => console.warn("설정값 로드 실패", e))
-      .finally(() => {
-        if (!isMounted) return;
-        if (rc > 0) {
-          setSetupCountdown(rc);
-          timerId = setInterval(() => {
-            setSetupCountdown(prev => {
-              if (prev === null) return null;
-              if (prev <= 1) {
-                if (timerId) clearInterval(timerId);
-                setTimeout(() => { if (startLoopRef.current) startLoopRef.current(); }, 0);
-                return null;
-              }
-              return prev - 1;
-            });
-          }, 1000);
-        } else {
-          setSetupCountdown(null);
-          setTimeout(() => { if (startLoopRef.current) startLoopRef.current(); }, 0);
-        }
-      });
+      .catch(e => console.warn("설정값 로드 비동기 실패", e));
 
     navigator.mediaDevices.getUserMedia({ 
       video: { width: 1280, height: 720, facingMode: "user" }
@@ -82,6 +90,7 @@ export default function WebcamCapture({
       streamRef.current = s;
       if (videoRef.current) {
         videoRef.current.srcObject = s;
+        setCameraReady(true);
       }
     }).catch(err => console.error("Webcam init error:", err));
 
@@ -282,10 +291,15 @@ export default function WebcamCapture({
                {setupCountdown !== null ? (
                  <>
                    <div className="text-3xl lg:text-7xl font-black text-primary tracking-tighter">{setupCountdown}</div>
-                   <div className="text-[10px] lg:text-xl font-bold text-zinc-600">초 뒤 시작</div>
+                   <div className="text-[10px] lg:text-xl font-bold text-zinc-600">
+                     {cameraReady ? "초 뒤 시작" : "초 뒤 시작 (카메라 연결 중)"}
+                   </div>
                  </>
                ) : (
-                 <div className="text-xs lg:text-xl font-bold text-zinc-400 animate-pulse">준비 중...</div>
+                 <div className="flex flex-col items-center gap-2">
+                   <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                   <div className="text-xs lg:text-xl font-bold text-zinc-400">촬영을 준비하고 있습니다...</div>
+                 </div>
                )}
              </div>
           ) : (

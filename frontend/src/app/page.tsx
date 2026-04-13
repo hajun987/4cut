@@ -251,8 +251,11 @@ export default function Home() {
             </div>
           ) : (
             <div className="flex flex-col items-center gap-6">
-              <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-primary font-bold animate-pulse text-sm lg:text-lg">엔진 예열 중... 🔥</p>
+              <div className="relative">
+                <div className="w-12 h-12 border-4 border-primary/10 rounded-full"></div>
+                <div className="absolute top-0 left-0 w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+              </div>
+              <p className="text-primary font-black animate-pulse text-sm lg:text-lg tracking-widest uppercase">Engine Loading... 🔥</p>
             </div>
           )}
         </div>
@@ -554,9 +557,12 @@ export default function Home() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center">
-             <div className="w-12 h-12 lg:w-20 lg:h-20 border-[6px] border-primary border-t-transparent rounded-full animate-spin mb-6 lg:mb-8 shadow-sm" />
-             <p className="text-lg lg:text-4xl font-black text-zinc-900">추억을 굽는 중입니다... 🔥</p>
-             <p className="text-zinc-500 mt-2 text-sm lg:text-xl">잠시만 기다려주세요!</p>
+             <div className="relative mb-8 shadow-2xl">
+                <div className="w-16 h-16 lg:w-24 lg:h-24 border-[6px] border-primary/10 rounded-full"></div>
+                <div className="absolute top-0 left-0 w-16 h-16 lg:w-24 lg:h-24 border-[6px] border-primary border-t-transparent rounded-full animate-spin"></div>
+             </div>
+             <p className="text-xl lg:text-4xl font-black text-zinc-900 tracking-tighter">추억을 굽는 중입니다... 🔥</p>
+             <p className="text-zinc-500 mt-3 text-sm lg:text-xl font-medium">가장 아름다운 순간을 저장하고 있어요.</p>
           </div>
         )}
       </section>
