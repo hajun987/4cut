@@ -106,29 +106,24 @@ export default function CanvasRenderer({
       }
 
       if (selectedFrame.startsWith("#")) {
-        ctx.fillStyle = selectedFrame;
-        ctx.beginPath();
-        ctx.rect(0, 0, 1080, 1920);
-        ctx.rect(64, 77, 465, 691);
-        ctx.rect(551, 77, 465, 691);
-        ctx.rect(64, 790, 465, 691);
-        ctx.rect(551, 790, 465, 691);
-        ctx.fill('evenodd');
-
-        if (frameText) {
-          const lines = frameText.split("\n");
-          const fontSizePx = frameFontSize * 1.5;
-          const lineHeight = fontSizePx * 1.2;
-          const totalHeight = lineHeight * lines.length;
-          const startY = 1700 - (totalHeight / 2) + (lineHeight / 2);
-          
-          ctx.font = `bold ${fontSizePx}px ${frameFont}, sans-serif`;
-          ctx.fillStyle = frameTextColor;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          lines.forEach((line, i) => {
-            ctx.fillText(line, 540, startY + (lineHeight * i));
-          });
+        // [수정] 이미 위에서 텍스트가 포함된 renderedFrameDataUrl을 만들었으므로, 그것을 배경으로 사용
+        try {
+          if (renderedFrameDataUrl) {
+            const frameImg = await loadImage(renderedFrameDataUrl);
+            ctx.drawImage(frameImg, 0, 0, 1080, 1920);
+          } else {
+            // 텍스트가 없는 경우 기본 색상만
+            ctx.fillStyle = selectedFrame;
+            ctx.beginPath();
+            ctx.rect(0, 0, 1080, 1920);
+            ctx.rect(64, 77, 465, 691);
+            ctx.rect(551, 77, 465, 691);
+            ctx.rect(64, 790, 465, 691);
+            ctx.rect(551, 790, 465, 691);
+            ctx.fill('evenodd');
+          }
+        } catch (e) {
+          console.warn("컬러 프레임 합성 실패:", e);
         }
       } else {
         try {
@@ -234,12 +229,9 @@ export default function CanvasRenderer({
     <>
       {isProcessing && (
         <div className="fixed inset-0 bg-black/80 z-[100] flex flex-col items-center justify-center text-white pb-20 fade-in">
-          <div className="w-24 h-24 border-8 border-primary border-t-transparent rounded-full animate-spin mb-8"></div>
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-8"></div>
           <h2 className="text-3xl font-black mb-4 tracking-tight">네컷 사진이 만들어지고 있어요 📸</h2>
           <p className="text-xl text-zinc-300 font-bold mb-8">잠시만 기다려주세요...</p>
-          <div className="w-1/2 max-w-md bg-zinc-800 rounded-full h-4 overflow-hidden mb-4 shadow-inner">
-             <div className="bg-primary h-full rounded-full animate-[progress_10s_ease-out_forwards]" style={{width: '90%', animationDuration: '8s'}}></div>
-          </div>
           <p className="text-sm font-bold text-zinc-400 animate-pulse">{loadingText}</p>
         </div>
       )}

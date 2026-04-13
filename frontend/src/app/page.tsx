@@ -250,10 +250,8 @@ export default function Home() {
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-48 lg:w-64 h-2 lg:h-3 bg-zinc-100 rounded-full overflow-hidden relative">
-                <div className="absolute inset-0 bg-primary animate-pulse w-full origin-left shadow-sm" />
-              </div>
+            <div className="flex flex-col items-center gap-6">
+              <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
               <p className="text-primary font-bold animate-pulse text-sm lg:text-lg">엔진 예열 중... 🔥</p>
             </div>
           )}
