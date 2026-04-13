@@ -168,10 +168,12 @@ export default function CanvasRenderer({
 
       let finalImageUrl = "";
       let finalImageId = "";
+      let sharedFolderId = ""; // Gofile 폴더 ID 저장용
       if (photoUploadRes.ok) {
         const pData = await photoUploadRes.json();
         finalImageUrl = pData.url;
         finalImageId = pData.filename;
+        sharedFolderId = pData.folderId; // Gofile 폴더 ID
       } else {
         throw new Error("사진 서버 저장 실패");
       }
@@ -194,6 +196,10 @@ export default function CanvasRenderer({
 
               const videoFormData = new FormData();
               videoFormData.append("video", mp4Blob, `${Date.now()}.mp4`);
+              if (sharedFolderId) {
+                videoFormData.append("folderId", sharedFolderId); // Gofile 폴더에 묶기
+              }
+              
               const videoRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/save-video`, {
                 method: "POST",
                 body: videoFormData

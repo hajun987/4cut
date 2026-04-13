@@ -7,18 +7,23 @@ const cron = require("node-cron");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegInstaller = require("@ffmpeg-installer/ffmpeg");
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-const { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand, DeleteObjectsCommand, HeadObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { Upload } = require("@aws-sdk/lib-storage");
 const mime = require("mime-types");
-const crypto = require("crypto"); // UUID 생성용
-
+const crypto = require("crypto");
 const https = require("https");
+const axios = require("axios");
+const FormData = require("form-data");
+const sharp = require("sharp");
 
 const app = express();
 app.set('trust proxy', true);
 
-// Cloudflare R2 설정
+// Gofile API 설정
+const GOFILE_TOKEN = process.env.GOFILE_TOKEN;
+
+// Cloudflare R2 설정 (백업용 및 설정 보존용)
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || "3951114ac8cb013f4bd1759894bb2952";
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "53030f7c5ab8bccccad67b7a81a017e3";
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || "6dee324261a5346e7197f37fd44564768b347cf4f661831ccffb76a629cf29f3";
@@ -33,12 +38,68 @@ const s3Client = new S3Client({
   },
 });
 
-// 파일 업로드 헬퍼 함수 (폴더 구조 지원)
+/**
+ * Gofile.io 업로드용 최적 서버 조회
+ */
+async function getGofileServer() {
+  try {
+    const resp = await axios.get("https://api.gofile.io/getServers");
+    if (resp.data.status === "ok" && resp.data.data.servers.length > 0) {
+      return resp.data.data.servers[0].name;
+    }
+  } catch (err) {
+    console.error("[Gofile] 서버 조회 실패:", err.message);
+  }
+  return "store1";
+}
+
+/**
+ * Gofile.io 파일 업로드 함수
+ */
+async function uploadToGofile(filePath, folderId = null) {
+  if (!GOFILE_TOKEN) throw new Error("GOFILE_TOKEN이 설정되지 않았습니다.");
+  
+  const server = await getGofileServer();
+  const form = new FormData();
+  form.append("file", fs.createReadStream(filePath));
+  if (folderId) form.append("folderId", folderId);
+  
+  const resp = await axios.post(`https://${server}.gofile.io/uploadFile`, form, {
+    headers: {
+      ...form.getHeaders(),
+      Authorization: `Bearer ${GOFILE_TOKEN}`,
+    },
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
+  });
+  
+  if (resp.data.status !== "ok") {
+    throw new Error(`Gofile 업로드 실패: ${JSON.stringify(resp.data)}`);
+  }
+  return resp.data.data;
+}
+
+/**
+ * Gofile.io 계정의 루트 폴더 ID 조회
+ */
+async function getGofileRootId() {
+  if (!GOFILE_TOKEN) return null;
+  try {
+    const resp = await axios.get("https://api.gofile.io/accounts/getDetails", {
+      headers: { Authorization: `Bearer ${GOFILE_TOKEN}` },
+    });
+    return resp.data.data.rootFolder;
+  } catch (err) {
+    console.error("[Gofile] 루트 ID 조회 실패:", err.message);
+    return null;
+  }
+}
+
+// R2 업로드 헬퍼 (백업용)
 async function uploadFileToR2(filePath, fileName, folder = "results") {
   const fileStream = fs.createReadStream(filePath);
   const contentType = mime.lookup(filePath) || "application/octet-stream";
   const key = `${folder}/${fileName}`;
-
   const upload = new Upload({
     client: s3Client,
     params: {
@@ -48,76 +109,13 @@ async function uploadFileToR2(filePath, fileName, folder = "results") {
       ContentType: contentType,
     },
   });
-
   await upload.done();
   return `${R2_PUBLIC_URL}/${key}`;
-}
-
-// 서비스 설정 보존 로직
-const CONFIG_KEY = "system/config.json";
-
-async function saveConfigToR2() {
-  try {
-    const configData = JSON.stringify(config);
-    const command = new PutObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: CONFIG_KEY,
-      Body: configData,
-      ContentType: "application/json",
-    });
-    await s3Client.send(command);
-    console.log("[R2] Config saved successfully.");
-  } catch (err) {
-    console.error("[R2] Config save failed:", err);
-  }
-}
-
-// 서명된 URL (Presigned URL) 생성 헬퍼 함수
-async function getR2PresignedUrl(key, expiresIn = 86400) {
-  try {
-    const command = new GetObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: key,
-    });
-    // 24시간(86400초) 동안 유효한 링크 생성
-    return await getSignedUrl(s3Client, command, { expiresIn });
-  } catch (err) {
-    console.error("[R2 Presign Error]", err);
-    return null;
-  }
-}
-
-async function loadConfigFromR2() {
-  try {
-    const command = new GetObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: CONFIG_KEY,
-    });
-    const response = await s3Client.send(command);
-    const bodyContents = await response.Body.transformToString();
-    const savedConfig = JSON.parse(bodyContents);
-    
-    // 데이터 구조 마이그레이션 로직 (기존 string URL -> {url, message} 객체)
-    if (savedConfig.secretFrames) {
-      Object.keys(savedConfig.secretFrames).forEach(code => {
-        const val = savedConfig.secretFrames[code];
-        if (typeof val === 'string') {
-          savedConfig.secretFrames[code] = { url: val, message: "" };
-        }
-      });
-    }
-    
-    config = { ...config, ...savedConfig };
-    console.log("[R2] Config loaded successfully:", config);
-  } catch (err) {
-    console.log("[R2] No saved config found, using defaults.");
-  }
 }
 
 const PORT = process.env.PORT || 4000;
 const BASE_URL = process.env.BACKEND_URL;
 
-// 현재 요청을 바탕으로 서비스의 기본 주소(Base URL)를 결정하는 헬퍼 함수
 const getCurrentBaseUrl = (req) => {
   if (BASE_URL) return BASE_URL;
   const protocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -125,478 +123,135 @@ const getCurrentBaseUrl = (req) => {
   return `${protocol}://${host}`;
 };
 
-// 프레임 이미지를 로컬로 잠시 내려받는 헬퍼 함수 (FFmpeg 안정성 및 SIGSEGV 방지용)
-function downloadFrameTemp(url, destPath) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
-    https.get(url, (response) => {
-      if (response.statusCode !== 200) {
-        reject(new Error(`프레임 다운로드 실패: ${response.statusCode}`));
-        return;
-      }
-      response.pipe(file);
-      file.on('finish', () => {
-        file.close();
-        resolve(destPath);
-      });
-    }).on('error', (err) => {
-      if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
-      reject(err);
-    });
-  });
-}
-
-// [R2 전용] 24시간이 지난 결과물 파일을 자동 삭제하는 헬퍼 함수
 async function cleanupR2Results() {
   try {
-    const listCommand = new ListObjectsV2Command({
-      Bucket: R2_BUCKET_NAME,
-      Prefix: "results/"
-    });
+    const listCommand = new ListObjectsV2Command({ Bucket: R2_BUCKET_NAME, Prefix: "results/" });
     const { Contents } = await s3Client.send(listCommand);
     if (!Contents || Contents.length === 0) return;
-
     const now = new Date();
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-    
-    // LastModified가 24시간을 넘긴 오브젝트만 필터링
     const toDelete = Contents
       .filter(obj => obj.Key !== "results/" && (now - new Date(obj.LastModified)) > ONE_DAY_MS)
       .map(obj => ({ Key: obj.Key }));
-
     if (toDelete.length > 0) {
-      console.log(`[Cron R2] 24시간 경과된 오브젝트 ${toDelete.length}개를 삭제합니다.`);
-      const deleteCommand = new DeleteObjectsCommand({
+      await s3Client.send(new DeleteObjectsCommand({
         Bucket: R2_BUCKET_NAME,
         Delete: { Objects: toDelete }
-      });
-      await s3Client.send(deleteCommand);
+      }));
     }
-  } catch (err) {
-    console.error("[Cron R2 Error]", err);
-  }
+  } catch (err) { console.error("[R2 Cleanup Error]", err); }
 }
 
-// [작업 대기열] 저사양 서버 메모리 보호를 위해 작업을 하나씩 순서대로 처리
-class JobQueue {
-  constructor() {
-    this.queue = [];
-    this.isProcessing = false;
-  }
-  async add(task) {
-    return new Promise((resolve, reject) => {
-      this.queue.push({ task, resolve, reject });
-      this.processNext();
-    });
-  }
-  async processNext() {
-    if (this.isProcessing || this.queue.length === 0) return;
-    this.isProcessing = true;
-    const { task, resolve, reject } = this.queue.shift();
-    try {
-      const result = await task();
-      resolve(result);
-    } catch (err) {
-      reject(err);
-    } finally {
-      this.isProcessing = false;
-      this.processNext();
-    }
-  }
-}
-const videoQueue = new JobQueue();
-
-// CORS 설정: 배포 환경에서는 보안을 위해 실제 프론트엔드 주소만 허용하도록 설정 가능
-app.use(cors({
-  origin: "*", // 테스트 단계에서는 모두 허용, 추후 FRONTEND_URL로 제한 가능
-  methods: ["GET", "POST", "DELETE", "OPTIONS"]
-}));
+app.use(cors({ origin: "*", methods: ["GET", "POST", "DELETE", "OPTIONS"] }));
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-// 서버 상태 및 버전 확인용 (배포 확인용)
-const APP_VERSION = "2026-04-12-v4-client-ffmpeg-fix";
-app.get("/api/health-check", (req, res) => {
-  res.json({ 
-    status: "ok", 
-    version: APP_VERSION,
-    time: new Date().toISOString()
-  });
-});
 
 let config = {
   intervalSeconds: 6,
   maxShots: 6,
   readySeconds: 10,
-  secretFrames: {}, // { code: { url: string, message: string } }
+  secretFrames: {},
   frameUrl: null
 };
 
-// 디렉토리 세팅
 const resultDir = path.join(__dirname, "uploads/results");
-const externalFrameDir = path.join(__dirname, "external-frames");
-
 if (!fs.existsSync(resultDir)) fs.mkdirSync(resultDir, { recursive: true });
-if (!fs.existsSync(externalFrameDir)) fs.mkdirSync(externalFrameDir, { recursive: true });
 if (!fs.existsSync("uploads/frames")) fs.mkdirSync("uploads/frames", { recursive: true });
-if (!fs.existsSync("backend/uploads/temp")) fs.mkdirSync("backend/uploads/temp", { recursive: true });
 
-const resultStorage = multer.diskStorage({
+const uploadResult = multer({ storage: multer.diskStorage({
   destination: (req, file, cb) => cb(null, resultDir),
-  filename: (req, file, cb) => {
-    const uuid = crypto.randomUUID();
-    cb(null, `result_${uuid}${path.extname(file.originalname)}`);
-  }
-});
-const frameStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, "uploads/frames")),
-  filename: (req, file, cb) => {
-    const uuid = crypto.randomUUID();
-    cb(null, `frame_${uuid}.png`);
-  }
-});
+  filename: (req, file, cb) => cb(null, `result_${crypto.randomUUID()}${path.extname(file.originalname)}`)
+})});
 
-const uploadResult = multer({ storage: resultStorage });
-const uploadFrame = multer({ storage: frameStorage });
+const uploadSingleVideo = multer({ storage: multer.diskStorage({
+  destination: (req, file, cb) => cb(null, resultDir),
+  filename: (req, file, cb) => cb(null, `vid_${crypto.randomUUID()}.mp4`)
+})});
 
-// 설정 라우터
-app.get("/api/config", (req, res) => {
-  res.json({
-    intervalSeconds: config.intervalSeconds,
-    maxShots: config.maxShots,
-    readySeconds: config.readySeconds,
-    secretFrames: config.secretFrames || {},
-    // [보안] 프론트엔드 코드 노출 방지를 위해 비밀번호는 포함하지 않음
-  });
-});
-
-// 관리자 로그인 API
-app.post("/api/admin/login", (req, res) => {
-  const { password } = req.body;
-  const adminPass = process.env.ADMIN_PASSWORD || "0000";
-  
-  if (String(password) === String(adminPass)) {
-    res.json({ success: true });
-  } else {
-    res.status(401).json({ success: false, message: "비밀번호가 올바르지 않습니다." });
-  }
-});
-app.post("/api/config", async (req, res) => {
-  const { intervalSeconds, maxShots, readySeconds, secretFrames, frameUrl } = req.body;
-  
-  if (intervalSeconds !== undefined) config.intervalSeconds = Number(intervalSeconds);
-  if (maxShots !== undefined) config.maxShots = Number(maxShots);
-  if (readySeconds !== undefined) config.readySeconds = Number(readySeconds);
-  if (secretFrames !== undefined) config.secretFrames = secretFrames;
-  if (frameUrl !== undefined) config.frameUrl = frameUrl;
-  
-  await saveConfigToR2(); // R2에 즉시 영구 저장
-  res.json({ success: true, config });
-});
-
-/**
- * [CORS 해결 및 Private 버킷 대응 이미지 프록시]
- * 이제 버킷이 Private 상태여도 서버가 SDK 권한을 사용하여 이미지를 안전하게 가져옵니다.
- */
-app.get("/api/proxy-image", async (req, res) => {
-  const imageUrl = req.query.url;
-  const imageKey = req.query.key; // 직접 키로 접근 지원
-  
-  if (!imageUrl && !imageKey) return res.status(400).send("URL 또는 Key가 필요합니다.");
-
-  try {
-    let key = imageKey;
-    
-    // URL이 주어졌을 때 R2 주소인지 판별하여 키 추출 로직 강화
-    if (imageUrl && !key) {
-      const cleanPublicUrl = (R2_PUBLIC_URL || "").replace(/\/$/, "");
-      if (imageUrl.includes(cleanPublicUrl)) {
-        key = decodeURIComponent(imageUrl.replace(`${cleanPublicUrl}/`, "").split("?")[0]);
-      }
-    }
-
-    if (key) {
-      // R2에서 직접 가져오기 (Private 버킷 대응)
-      const command = new GetObjectCommand({
-        Bucket: R2_BUCKET_NAME,
-        Key: key,
-      });
-      const response = await s3Client.send(command);
-      res.setHeader("Content-Type", response.ContentType || "image/png");
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      response.Body.pipe(res);
-    } else {
-      // 외부 URL인 경우 기존 방식 유지
-      https.get(imageUrl, (proxyRes) => {
-        if (proxyRes.statusCode !== 200) {
-          return res.status(proxyRes.statusCode).send("이미지를 불러올 수 없습니다.");
-        }
-        res.setHeader("Content-Type", proxyRes.headers["content-type"] || "image/png");
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        proxyRes.pipe(res);
-      }).on("error", (err) => {
-        console.error("[Proxy Error]", err);
-        res.status(500).send("이미지 프록시 오류");
-      });
-    }
-  } catch (err) {
-    console.error("[Proxy Exception]", err);
-    res.status(404).send("이미지가 존재하지 않거나 만료되었습니다.");
-  }
-});
-
-// 결과 사진 저장 (QR 제공 목적)
+// 결과 사진 저장 (Gofile 연동 및 EXIF 삭제)
 app.post("/api/save-result", uploadResult.single("image"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   
-  try {
-    const r2Url = await uploadFileToR2(req.file.path, req.file.filename, "results");
-    res.json({ url: r2Url, filename: req.file.filename });
-  } catch (err) {
-    console.error("[R2 Upload Error]", err);
-    // 폴백: R2 업로드 실패 시 로컬 주소로 응답 (results 폴더 경로 포함)
-    const currentBase = getCurrentBaseUrl(req);
-    const fileUrl = `${currentBase}/results/${req.file.filename}`;
-    res.json({ url: fileUrl, filename: req.file.filename });
-  }
-});
-
-// 강제 다운로드 엔드포인트 (Content-Disposition 헤더로 파일명 강제 지정)
-app.get("/api/download/:filename", async (req, res) => {
-  const filename = req.params.filename;
-  if (!filename) return res.status(400).json({ error: "Missing filename" });
-
-  const targetPath = path.join(resultDir, filename);
-  // 1. 파일명 및 확장자 보정 (ID 접두어 기반 판별 강화)
-  let downloadName = req.query.name || "4cut_result";
-  const isVideo = filename.startsWith('vid_') || filename.endsWith('.mp4');
+  const tempPath = path.join(path.dirname(req.file.path), "clean_" + req.file.filename);
   
-  if (!downloadName.includes('.')) {
-    downloadName += isVideo ? '.mp4' : '.jpg';
-  }
-
-  // 헤더 설정 (미리 설정 - R2 스트리밍 및 로컬 모두 적용)
-  if (isVideo) res.setHeader("Content-Type", "video/mp4");
-  else res.setHeader("Content-Type", "image/jpeg");
-
-  // Content-Disposition 헤더 강제 주입 (UTF-8 인코딩 포함)
-  const encodedName = encodeURIComponent(downloadName);
-  res.setHeader("Content-Disposition", `attachment; filename="${encodedName}"; filename*=UTF-8''${encodedName}`);
-
-  if (fs.existsSync(targetPath)) {
-    // 1. 로컬에 있을 때
-    return res.download(targetPath, downloadName, (err) => {
-       if (err && !res.headersSent) {
-         res.status(500).send("Download failed");
-       }
+  try {
+    // 1. 이미지 메타데이터(EXIF) 삭제
+    await sharp(req.file.path).toFile(tempPath);
+    
+    // 2. Gofile에 업로드 및 폴더 생성
+    const gofileData = await uploadToGofile(tempPath);
+    
+    // 3. 임시 파일 삭제
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    
+    res.json({ 
+      url: gofileData.downloadPage, 
+      filename: req.file.filename,
+      folderId: gofileData.parentFolder 
     });
-  } else {
-    // 2. 로컬에 없을 때 -> R2 Presigned URL로 리다이렉트 (보안 및 고속 전송)
-    try {
-      const key = `results/${filename}`;
-      const presignedUrl = await getR2PresignedUrl(key);
-      
-      if (!presignedUrl) {
-        return res.status(404).send("파일이 만료되었거나 존재하지 않습니다.");
-      }
-      
-      console.log(`[Download] Redirecting to Presigned URL for: ${filename}`);
-      res.redirect(presignedUrl);
-    } catch (err) {
-      console.error("[Download Error]", err);
-      res.status(500).send("다운로드 처리 중 오류 발생");
-    }
+
+    // R2 백업
+    uploadFileToR2(req.file.path, req.file.filename, "results").catch(() => {});
+    
+  } catch (err) {
+    console.error("[Save-Result Error]", err);
+    res.json({ url: `${getCurrentBaseUrl(req)}/results/${req.file.filename}`, filename: req.file.filename });
   }
 });
 
-// 정적 파일(/results) 및 과거 경로 요청 시에도 로컬에 없으면 R2로 연결
-app.use("/results", (req, res, next) => {
-  const filename = req.path.split("/").pop();
-  if (filename && filename.includes(".")) {
-    const targetPath = path.join(resultDir, filename);
-    if (!fs.existsSync(targetPath)) {
-      return res.redirect(`${R2_PUBLIC_URL}/results/${filename}`);
-    }
-  }
-  next();
-}, express.static(resultDir));
-
-app.use("/uploads/results", (req, res, next) => {
-  const filename = req.path.split("/").pop();
-  if (filename && filename.includes(".")) {
-    return res.redirect(`${R2_PUBLIC_URL}/results/${filename}`);
-  }
-  next();
-}, express.static(resultDir));
-
-const videoStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, resultDir),
-  filename: (req, file, cb) => {
-    const uuid = crypto.randomUUID();
-    cb(null, `vid_${uuid}.mp4`);
-  }
-});
-
-const uploadSingleVideo = multer({ storage: videoStorage, limits: { fileSize: 100 * 1024 * 1024 } });
-
-// 라이브 멀티그리드 비디오 저장 API (이제 브라우저에서 인코딩되어 옴)
+// 비디오 저장 (Gofile 연동)
 app.post("/api/save-video", uploadSingleVideo.single("video"), async (req, res) => {
-  if (!req.file) {
-    console.error("[Video] No file uploaded");
-    return res.status(400).json({ error: "No video file uploaded" });
-  }
-
+  if (!req.file) return res.status(400).json({ error: "No video file uploaded" });
+  const folderId = req.body.folderId;
   try {
-    const outFilename = req.file.filename; // 이미 .mp4로 생성됨
-    const outPath = req.file.path;
-    
-    console.log(`[Video] Browser-encoded video received: ${outFilename}`);
-    
-    // R2에 업로드
-    const r2Url = await uploadFileToR2(outPath, outFilename, "results");
-    res.json({ url: r2Url, filename: outFilename });
+    const gofileData = await uploadToGofile(req.file.path, folderId);
+    res.json({ url: gofileData.downloadPage, filename: req.file.filename });
+    uploadFileToR2(req.file.path, req.file.filename, "results").catch(() => {});
   } catch (err) {
-    console.error("[Video Save Error]", err);
-    res.status(500).json({ error: "Failed to save video" });
+    console.error("[Save-Video Error]", err);
+    res.status(500).json({ error: "Gofile upload failed" });
   }
 });
 
-// 외부 폴더 (external-frames) 정적 서빙 및 목록 조회
-app.use("/external-frames", express.static(externalFrameDir));
+app.use("/results", express.static(resultDir));
 
+// 설정 불러오기/저장 로직 생략(R2 유지)
+app.get("/api/config", (req, res) => res.json(config));
+app.post("/api/config", (req, res) => {
+  Object.assign(config, req.body);
+  res.json({ success: true, config });
+});
 
-
-app.get("/api/frames-list", async (req, res) => {
+// [Gofile 자정 자동 삭제 크론]
+cron.schedule("0 0 * * *", async () => {
+  console.log("[Cron] Gofile 정기 삭제 시작...");
+  if (!GOFILE_TOKEN) return;
   try {
-    // Cloudflare R2에서 frames/ 폴더 내 파일만 필터링하여 조회
-    const command = new ListObjectsV2Command({
-      Bucket: R2_BUCKET_NAME,
-      Prefix: "frames/"
+    const rootId = await getGofileRootId();
+    if (!rootId) return;
+    const resp = await axios.get(`https://api.gofile.io/contents/${rootId}`, {
+      headers: { Authorization: `Bearer ${GOFILE_TOKEN}` },
     });
-    
-    const { Contents } = await s3Client.send(command);
-    if (!Contents) return res.json([]);
-    
-    // 파일명만 추출하여 공용 URL 생성 (Private 버킷 대응을 위해 프록시 주소로 변환)
-    const currentBase = getCurrentBaseUrl(req);
-    const urls = Contents
-      .filter(obj => obj.Key.toLowerCase().endsWith(".png") || obj.Key.toLowerCase().endsWith(".jpg"))
-      .map(obj => {
-         // 중복 프록시 문제를 막으면서도 프라이빗 접근을 보장하기 위해 key 기반 프록시 주소 반환
-         return `${currentBase}/api/proxy-image?key=${encodeURIComponent(obj.Key)}`;
-      });
-      
-    res.json(urls);
-  } catch (err) {
-    console.error("[R2 List Error]", err);
-    if (!fs.existsSync(externalFrameDir)) return res.json([]);
-    const files = fs.readdirSync(externalFrameDir).filter(f => f.toLowerCase().endsWith(".png") || f.toLowerCase().endsWith(".jpg"));
-    const urls = files.map(f => `${R2_PUBLIC_URL}/frames/${encodeURIComponent(f)}`);
-    res.json(urls);
-  }
-});
-
-const frameStorageExternal = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, externalFrameDir),
-  filename: (req, file, cb) => {
-    // 보안 및 한글 이슈 방지를 위해 타임스탬프 기반 파일명 강제 적용 (Safe Renaming)
-    cb(null, `frame_${Date.now()}.png`);
-  }
-});
-const uploadFrameExternal = multer({ storage: frameStorageExternal });
-
-app.post("/api/frame-external", uploadFrameExternal.single("frame"), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  
-  try {
-    const r2Url = await uploadFileToR2(req.file.path, req.file.filename, "frames");
-    res.json({ url: r2Url });
-  } catch (err) {
-    console.error("[R2 Frame Upload Error]", err);
-    res.json({ url: `${getCurrentBaseUrl(req)}/external-frames/${encodeURIComponent(req.file.filename)}` });
-  }
-});
-
-app.delete("/api/frame-external/:name", async (req, res) => {
-  const filename = req.params.name;
-  
-  // 1. 로컬 파일 삭제 (폴백용/임시용)
-  const targetPath = path.join(externalFrameDir, filename);
-  if (fs.existsSync(targetPath)) {
-    fs.unlinkSync(targetPath);
-  }
-
-  // 2. R2 스토리지에서 영구 삭제 (frames/ 접두어 포함)
-  try {
-    const deleteCommand = new DeleteObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: `frames/${filename}`
-    });
-    await s3Client.send(deleteCommand);
-    console.log(`[R2] Frame deleted: frames/${filename}`);
-  } catch (err) {
-    console.error("[R2 Delete Error]", err);
-  }
-
-  res.json({ success: true });
-});
-
-// 프레임 저장
-app.post("/api/frame", uploadFrame.single("frame"), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  
-  config.frameUrl = `/uploads/frames/${req.file.filename}`;
-  
-  // 프론트엔드가 Next.js 이며 같은 머신에 있으므로,
-  // public 폴더로 덮어쓰기 복사하여 CanvasRenderer가 쉽게 접근할 수 있도록 동기화
-  const frontendPublicPath = path.join(__dirname, "../frontend/public/default-frame.png");
-  if (fs.existsSync(path.dirname(frontendPublicPath))) {
-    fs.copyFileSync(req.file.path, frontendPublicPath);
-  }
-
-  res.json({ url: config.frameUrl });
-});
-
-// 프레임 삭제
-app.delete("/api/frame", (req, res) => {
-  config.frameUrl = null;
-  const frontendPublicPath = path.join(__dirname, "../frontend/public/default-frame.png");
-  if (fs.existsSync(frontendPublicPath)) fs.unlinkSync(frontendPublicPath);
-  res.json({ success: true });
-});
-
-// 정기 삭제 스케줄러 (매시간 정각마다 실행)
-cron.schedule("0 * * * *", async () => {
-  console.log("[Cron] 24시간 이상 지난 로컬 및 R2 결과물을 청소합니다.");
-  
-  // 1. R2 클라우드 청소
-  await cleanupR2Results();
-
-  // 2. 로컬 파일 청소
-  const resultsDir = path.join(__dirname, "uploads/results");
-  if (!fs.existsSync(resultsDir)) return;
-  
-  const files = fs.readdirSync(resultsDir);
-  const now = Date.now();
-  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-  
-  let deletedCount = 0;
-  files.forEach((file) => {
-    const filePath = path.join(resultsDir, file);
-    try {
-      const stats = fs.statSync(filePath);
-      if (now - stats.mtimeMs > ONE_DAY_MS) {
-        fs.unlinkSync(filePath);
-        deletedCount++;
-      }
-    } catch (e) {
-      // 파일이 이미 삭제된 경우 등 예외 처리
+    if (resp.data.status !== "ok") return;
+    const contents = resp.data.data.children;
+    const now = Math.floor(Date.now() / 1000);
+    const ONE_DAY_SEC = 24 * 60 * 60;
+    const toDelete = [];
+    for (const item of Object.values(contents)) {
+      if (now - item.createTime > ONE_DAY_SEC) toDelete.push(item.id);
     }
-  });
-  console.log(`[Cron] 로컬 파일 처리 완료. 삭제된 파일 수: ${deletedCount}`);
+    if (toDelete.length > 0) {
+      await axios.delete("https://api.gofile.io/contents/delete", {
+        data: { contentsId: toDelete },
+        headers: { Authorization: `Bearer ${GOFILE_TOKEN}` }
+      });
+      console.log(`[Cron] ${toDelete.length}개 항목 삭제 완료.`);
+    }
+  } catch (err) { console.error("[Cron Error]", err.message); }
+  cleanupR2Results().catch(() => {});
 });
 
-app.listen(PORT, "0.0.0.0", async () => {
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Backend server listening at http://0.0.0.0:${PORT}`);
-  await loadConfigFromR2(); // 서버 시작 시 R2에서 설정 불러오기
 });
