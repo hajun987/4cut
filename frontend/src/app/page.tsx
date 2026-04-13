@@ -347,22 +347,26 @@ export default function Home() {
         </div>
         <div className="hidden lg:flex w-full items-center justify-center">
             {(step === "FRAME_SELECTION" || (step === "SELECTION" && secretCode && secretFrameMap[secretCode])) && (
-              <CanvasRenderer 
-                selectedSlots={selectedSlots} 
-                selectedIndices={selectedIndices}
-                selectedFrame={selectedFrame}
-                shotImages={shots}
-                shotVideos={shotVideos}
-                onUploaded={(url, id, vidId, localUrl, localVidUrl) => {
-                  setFinalQrUrl(url); // Gofile URL
-                  setFinalPreviewUrl(localUrl || null); // 로컬 이미지
-                  setFinalVideoPreviewUrl(localVidUrl || null); // 로컬 비디오
-                  setFinalImageId(id);
-                  if (vidId) setFinalVideoId(vidId);
-                  setStep("RESULT");
-                }}
-                videoDuration={intervalSeconds}
-              />
+                <CanvasRenderer 
+                  selectedSlots={selectedSlots} 
+                  selectedIndices={selectedIndices}
+                  selectedFrame={selectedFrame}
+                  shotImages={shots}
+                  shotVideos={shotVideos}
+                  onUploaded={(url, id, vidId, localUrl, localVidUrl) => {
+                    setFinalQrUrl(url); // Gofile URL
+                    setFinalPreviewUrl(localUrl || null); // 로컬 이미지
+                    setFinalVideoPreviewUrl(localVidUrl || null); // 로컬 비디오
+                    setFinalImageId(id);
+                    if (vidId) setFinalVideoId(vidId);
+                    setStep("RESULT");
+                  }}
+                  videoDuration={intervalSeconds}
+                  frameText={frameText}
+                  frameFont={frameFont}
+                  frameFontSize={frameFontSize}
+                  frameTextColor={frameTextColor}
+                />
             )}
         </div>
       </section>
