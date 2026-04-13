@@ -51,12 +51,27 @@ export default function CanvasRenderer({
         textCanvas.height = 1920;
         const tCtx = textCanvas.getContext("2d");
         if (tCtx) {
+          // 사진이 들어갈 자리를 비워두고 배경색 채우기 (Even-Odd Fill)
+          const coordinates = [
+            { x: 63, y: 76, w: 467, h: 693 },
+            { x: 550, y: 76, w: 467, h: 693 },
+            { x: 63, y: 789, w: 467, h: 693 },
+            { x: 550, y: 789, w: 467, h: 693 },
+          ];
+
           tCtx.fillStyle = selectedFrame;
-          tCtx.fillRect(0, 0, 1080, 1920);
+          tCtx.beginPath();
+          tCtx.rect(0, 0, 1080, 1920); // 전체 배경
+          coordinates.forEach(c => {
+            tCtx.rect(c.x, c.y, c.w, c.h); // 사진 구멍
+          });
+          tCtx.fill('evenodd');
           
           try {
             if (frameText && frameFont) {
+              // 폰트가 실제로 가용할 때까지 로드 대기
               await document.fonts.load(`bold ${frameFontSize * 1.5}px ${frameFont}`);
+              await document.fonts.ready;
             }
           } catch (e) {
             console.warn("폰트 로드 실패:", e);
@@ -113,22 +128,18 @@ export default function CanvasRenderer({
       }
 
       if (selectedFrame.startsWith("#")) {
-        // [수정] 위에서 만든 renderedFrameDataUrl을 JPG 배경으로도 사용하여 텍스트 누락 방지 및 로직 일원화
+        // [수정] 위에서 구멍을 뚫어 생성한 renderedFrameDataUrl을 사진 위에 겹침
         try {
           if (renderedFrameDataUrl) {
             const frameImg = await loadImage(renderedFrameDataUrl);
             ctx.drawImage(frameImg, 0, 0, 1080, 1920);
           }
         } catch (e) {
-          console.warn("컬러 프레임 합성 실패:", e);
-          // 극단적인 예외 상황 시 최소한의 배경이라도 채움
+          console.warn("컬러 프레임 합성 실패 (fallback 사용):", e);
           ctx.fillStyle = selectedFrame;
           ctx.beginPath();
           ctx.rect(0, 0, 1080, 1920);
-          ctx.rect(64, 77, 465, 691);
-          ctx.rect(551, 77, 465, 691);
-          ctx.rect(64, 790, 465, 691);
-          ctx.rect(551, 790, 465, 691);
+          coordinates.forEach(c => ctx.rect(c.x, c.y, c.w, c.h));
           ctx.fill('evenodd');
         }
       } else {
