@@ -284,9 +284,9 @@ cron.schedule("* * * * *", async () => {
     }
 
     if (toDeleteGofileIds.length > 0) {
-      // Gofile 삭제
-      await axios.delete("https://api.gofile.io/contents/delete", {
-        data: { contentsId: toDeleteGofileIds },
+      // Gofile 삭제 (공식 V2 스펙: DELETE /contents, IDs는 쉼표로 구분된 문자열)
+      await axios.delete("https://api.gofile.io/contents", {
+        data: { contentsId: toDeleteGofileIds.join(",") },
         headers: { Authorization: `Bearer ${GOFILE_TOKEN}` }
       });
       
