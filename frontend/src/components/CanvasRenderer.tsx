@@ -179,6 +179,7 @@ export default function CanvasRenderer({
       }
 
       let localVidUrl = "";
+      let uploadedVideoId = "";
       if (mode === 'video') {
         setLoadingText("브라우저에서 영상을 직접 합성 중입니다 🚀");
         try {
