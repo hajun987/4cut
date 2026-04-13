@@ -116,6 +116,25 @@ async function uploadFileToR2(filePath, fileName, folder = "results") {
   return `${R2_PUBLIC_URL}/${key}`;
 }
 
+/**
+ * R2에 Gofile 폴더 ID 추적용 빈 파일 생성
+ */
+async function trackFolderInR2(folderId) {
+  try {
+    const timestamp = Date.now();
+    const key = `tracking/${folderId}_${timestamp}`;
+    const command = new PutObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: key,
+      Body: "", 
+    });
+    await s3Client.send(command);
+    console.log(`[R2 Tracking] Folder tracked: ${folderId}`);
+  } catch (err) {
+    console.error("[R2 Tracking Error]", err);
+  }
+}
+
 const PORT = process.env.PORT || 4000;
 const BASE_URL = process.env.BACKEND_URL;
 
@@ -193,7 +212,8 @@ app.post("/api/save-result", uploadResult.single("image"), async (req, res) => {
       folderId: gofileData.parentFolder 
     });
 
-    // R2 백업
+    // R2 트래킹 및 백업
+    trackFolderInR2(gofileData.parentFolder).catch(() => {});
     uploadFileToR2(req.file.path, req.file.filename, "results").catch(() => {});
     
   } catch (err) {
@@ -225,35 +245,60 @@ app.post("/api/config", (req, res) => {
   res.json({ success: true, config });
 });
 
-// [Gofile 자동 삭제 크론 - 테스트 모드: 1분마다 실행, 1분 지난 파일 삭제]
+// [Gofile 자동 삭제 크론 - R2 트래킹 기반]
 cron.schedule("* * * * *", async () => {
   console.log(`[Cron] Gofile 정기 삭제 체크 중... (${new Date().toLocaleString()})`);
   if (!GOFILE_TOKEN) return;
   try {
-    const rootId = await getGofileRootId();
-    if (!rootId) return;
-    const resp = await axios.get(`https://api.gofile.io/contents/${rootId}`, {
-      headers: { Authorization: `Bearer ${GOFILE_TOKEN}` },
+    // R2에서 트래킹 파일 목록 가져오기
+    const listCommand = new ListObjectsV2Command({
+      Bucket: R2_BUCKET_NAME,
+      Prefix: "tracking/",
     });
-    if (resp.data.status !== "ok") return;
-    const contents = resp.data.data.children;
-    const now = Math.floor(Date.now() / 1000);
-    const TEST_THRESHOLD_SEC = 60; // 테스트를 위해 1분으로 설정 (상용 시 86400)
-    const toDelete = [];
-    for (const item of Object.values(contents)) {
-      if (now - item.createTime > TEST_THRESHOLD_SEC) {
-        console.log(`[Cron] 삭제 대상 발견: ${item.name} (생성: ${new Date(item.createTime * 1000).toLocaleString()})`);
-        toDelete.push(item.id);
+    const { Contents } = await s3Client.send(listCommand);
+    if (!Contents || Contents.length === 0) {
+      console.log("[Cron] 삭제할 항목이 없습니다.");
+      return;
+    }
+
+    const now = Date.now();
+    const TEST_THRESHOLD_MS = 60 * 1000; // 테스트: 1분 (상용: 24 * 60 * 60 * 1000)
+    const toDeleteGofileIds = [];
+    const toDeleteR2Keys = [];
+
+    for (const obj of Contents) {
+      if (obj.Key === "tracking/") continue;
+      
+      const baseName = obj.Key.split("/")[1];
+      const parts = baseName.split("_");
+      if (parts.length < 2) continue;
+
+      const folderId = parts[0];
+      const timestamp = parseInt(parts[1], 10);
+
+      if (now - timestamp > TEST_THRESHOLD_MS) {
+        console.log(`[Cron] 삭제 대상 발견: ${folderId} (생성: ${new Date(timestamp).toLocaleString()})`);
+        toDeleteGofileIds.push(folderId);
+        toDeleteR2Keys.push({ Key: obj.Key });
       }
     }
-    if (toDelete.length > 0) {
+
+    if (toDeleteGofileIds.length > 0) {
+      // Gofile 삭제
       await axios.delete("https://api.gofile.io/contents/delete", {
-        data: { contentsId: toDelete },
+        data: { contentsId: toDeleteGofileIds },
         headers: { Authorization: `Bearer ${GOFILE_TOKEN}` }
       });
-      console.log(`[Cron] ${toDelete.length}개 항목 삭제 완료: ${toDelete.join(", ")}`);
+      
+      // R2 트래킹 파일 삭제
+      await s3Client.send(new DeleteObjectsCommand({
+        Bucket: R2_BUCKET_NAME,
+        Delete: { Objects: toDeleteR2Keys }
+      }));
+      
+      console.log(`[Cron] ${toDeleteGofileIds.length}개 항목 Gofile 및 R2 트래킹 삭제 완료.`);
     } else {
-      console.log("[Cron] 삭제할 항목이 없습니다.");
+      console.log("[Cron] 삭제 대기 중인 항목이 없습니다.");
     }
   } catch (err) { console.error("[Cron Error]", err.message); }
   cleanupR2Results().catch(() => {});
