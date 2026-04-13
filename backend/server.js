@@ -222,9 +222,9 @@ app.post("/api/config", (req, res) => {
   res.json({ success: true, config });
 });
 
-// [Gofile 자정 자동 삭제 크론]
-cron.schedule("0 0 * * *", async () => {
-  console.log("[Cron] Gofile 정기 삭제 시작...");
+// [Gofile 자동 삭제 크론 - 테스트 모드: 1분마다 실행, 1분 지난 파일 삭제]
+cron.schedule("* * * * *", async () => {
+  console.log(`[Cron] Gofile 정기 삭제 체크 중... (${new Date().toLocaleString()})`);
   if (!GOFILE_TOKEN) return;
   try {
     const rootId = await getGofileRootId();
@@ -235,17 +235,22 @@ cron.schedule("0 0 * * *", async () => {
     if (resp.data.status !== "ok") return;
     const contents = resp.data.data.children;
     const now = Math.floor(Date.now() / 1000);
-    const ONE_DAY_SEC = 24 * 60 * 60;
+    const TEST_THRESHOLD_SEC = 60; // 테스트를 위해 1분으로 설정 (상용 시 86400)
     const toDelete = [];
     for (const item of Object.values(contents)) {
-      if (now - item.createTime > ONE_DAY_SEC) toDelete.push(item.id);
+      if (now - item.createTime > TEST_THRESHOLD_SEC) {
+        console.log(`[Cron] 삭제 대상 발견: ${item.name} (생성: ${new Date(item.createTime * 1000).toLocaleString()})`);
+        toDelete.push(item.id);
+      }
     }
     if (toDelete.length > 0) {
       await axios.delete("https://api.gofile.io/contents/delete", {
         data: { contentsId: toDelete },
         headers: { Authorization: `Bearer ${GOFILE_TOKEN}` }
       });
-      console.log(`[Cron] ${toDelete.length}개 항목 삭제 완료.`);
+      console.log(`[Cron] ${toDelete.length}개 항목 삭제 완료: ${toDelete.join(", ")}`);
+    } else {
+      console.log("[Cron] 삭제할 항목이 없습니다.");
     }
   } catch (err) { console.error("[Cron Error]", err.message); }
   cleanupR2Results().catch(() => {});
