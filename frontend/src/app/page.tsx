@@ -21,6 +21,7 @@ export default function Home() {
   const [finalQrUrl, setFinalQrUrl] = useState<string | null>(null);
   const [finalImageId, setFinalImageId] = useState<string | null>(null);
   const [finalVideoId, setFinalVideoId] = useState<string | null>(null);
+  const [finalPreviewUrl, setFinalPreviewUrl] = useState<string | null>(null); // 화면 표시용 로컬 미리보기
   const [externalFrames, setExternalFrames] = useState<string[]>([]);
   const [secretCode, setSecretCode] = useState<string | null>(null);
   const [secretFrameMap, setSecretFrameMap] = useState<Record<string, any>>({});
@@ -283,12 +284,14 @@ export default function Home() {
 
   // 3. RESULT
   if (step === "RESULT" && finalQrUrl && finalImageId) {
-    const baseUrl = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
-    const ts = Date.now();
-    const qrTargetUrl = finalVideoId 
-       ? `${baseUrl}/share/${finalImageId}?vid=${finalVideoId}&t=${ts}` 
-       : `${baseUrl}/share/${finalImageId}?t=${ts}`;
-    return <ResultQR url={qrTargetUrl} imagePreview={finalQrUrl} imageId={finalImageId} videoId={finalVideoId || undefined} />;
+    return (
+      <ResultQR 
+        url={finalQrUrl} 
+        imagePreview={finalPreviewUrl || finalQrUrl} 
+        imageId={finalImageId} 
+        videoId={finalVideoId || undefined} 
+      />
+    );
   }
 
   // 4. SELECTION & FRAME_SELECTION
@@ -348,7 +351,8 @@ export default function Home() {
                 shotImages={shots}
                 shotVideos={shotVideos}
                 onUploaded={(url, id, vidId, localUrl) => {
-                  setFinalQrUrl(localUrl || url); 
+                  setFinalQrUrl(url); // Gofile URL
+                  setFinalPreviewUrl(localUrl); // 로컬 미리보기
                   setFinalImageId(id);
                   if (vidId) setFinalVideoId(vidId);
                   setStep("RESULT");
@@ -532,8 +536,11 @@ export default function Home() {
                 selectedSlots={selectedSlots} selectedIndices={selectedIndices} selectedFrame={selectedFrame}
                 shotImages={shots} shotVideos={shotVideos}
                 onUploaded={(url, id, vidId, localUrl) => {
-                  setFinalQrUrl(localUrl || url); setFinalImageId(id);
-                  if (vidId) setFinalVideoId(vidId); setStep("RESULT");
+                  setFinalQrUrl(url); // Gofile URL
+                  setFinalPreviewUrl(localUrl); // 로컬 미리보기
+                  setFinalImageId(id);
+                  if (vidId) setFinalVideoId(vidId);
+                  setStep("RESULT");
                 }}
                 videoDuration={intervalSeconds}
                 frameText={frameText}
