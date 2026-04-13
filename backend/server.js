@@ -80,25 +80,8 @@ async function uploadToGofile(filePath, folderId = null) {
 }
 
 /**
- * Gofile.io 계정의 루트 폴더 ID 조회
+ * R2 업로드 헬퍼 (백업용)
  */
-async function getGofileRootId() {
-  const envRootId = process.env.GOFILE_ROOT_ID;
-  if (envRootId) return envRootId; // 환경 변수가 있으면 즉시 사용 (무료 계정 권장)
-
-  if (!GOFILE_TOKEN) return null;
-  try {
-    const resp = await axios.get("https://api.gofile.io/accounts/getDetails", {
-      headers: { Authorization: `Bearer ${GOFILE_TOKEN}` },
-    });
-    return resp.data.data.rootFolder;
-  } catch (err) {
-    console.error(`[Gofile] 루트 ID 조회 실패 (403이면 GOFILE_ROOT_ID 설정 필수): ${err.message}`);
-    return null;
-  }
-}
-
-// R2 업로드 헬퍼 (백업용)
 async function uploadFileToR2(filePath, fileName, folder = "results") {
   const fileStream = fs.createReadStream(filePath);
   const contentType = mime.lookup(filePath) || "application/octet-stream";
@@ -245,8 +228,9 @@ app.post("/api/config", (req, res) => {
   res.json({ success: true, config });
 });
 
-// [Gofile 자동 삭제 크론 - R2 트래킹 기반]
-cron.schedule("* * * * *", async () => {
+// [Gofile 자동 삭제 크론 - R2 트래킹 기반 상용 모드]
+// 6시간마다 실행 (00:00, 06:00, 12:00, 18:00)
+cron.schedule("0 */6 * * *", async () => {
   console.log(`[Cron] Gofile 정기 삭제 체크 중... (${new Date().toLocaleString()})`);
   if (!GOFILE_TOKEN) return;
   try {
@@ -262,7 +246,7 @@ cron.schedule("* * * * *", async () => {
     }
 
     const now = Date.now();
-    const TEST_THRESHOLD_MS = 60 * 1000; // 테스트: 1분 (상용: 24 * 60 * 60 * 1000)
+    const DELETE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 상용 설정: 24시간
     const toDeleteGofileIds = [];
     const toDeleteR2Keys = [];
 
@@ -276,7 +260,7 @@ cron.schedule("* * * * *", async () => {
       const folderId = parts[0];
       const timestamp = parseInt(parts[1], 10);
 
-      if (now - timestamp > TEST_THRESHOLD_MS) {
+      if (now - timestamp > DELETE_THRESHOLD_MS) {
         console.log(`[Cron] 삭제 대상 발견: ${folderId} (생성: ${new Date(timestamp).toLocaleString()})`);
         toDeleteGofileIds.push(folderId);
         toDeleteR2Keys.push({ Key: obj.Key });
