@@ -128,33 +128,11 @@ const getCurrentBaseUrl = (req) => {
   return `${protocol}://${host}`;
 };
 
-async function cleanupR2Results() {
-  try {
-    const listCommand = new ListObjectsV2Command({ Bucket: R2_BUCKET_NAME, Prefix: "results/" });
-    const { Contents } = await s3Client.send(listCommand);
-    if (!Contents || Contents.length === 0) return;
-    const now = new Date();
-    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-    const toDelete = Contents
-      .filter(obj => obj.Key !== "results/" && (now - new Date(obj.LastModified)) > ONE_DAY_MS)
-      .map(obj => ({ Key: obj.Key }));
-    if (toDelete.length > 0) {
-      await s3Client.send(new DeleteObjectsCommand({
-        Bucket: R2_BUCKET_NAME,
-        Delete: { Objects: toDelete }
-      }));
-    }
-  } catch (err) { console.error("[R2 Cleanup Error]", err); }
-}
-
 app.use(cors({ origin: "*", methods: ["GET", "POST", "DELETE", "OPTIONS"] }));
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 let config = {
-  intervalSeconds: 6,
-  maxShots: 6,
-  readySeconds: 10,
   secretFrames: {},
   frameUrl: null
 };
@@ -195,9 +173,8 @@ app.post("/api/save-result", uploadResult.single("image"), async (req, res) => {
       folderId: gofileData.parentFolder 
     });
 
-    // R2 트래킹 및 백업
+    // R2 트래킹
     trackFolderInR2(gofileData.parentFolder).catch(() => {});
-    uploadFileToR2(req.file.path, req.file.filename, "results").catch(() => {});
     
   } catch (err) {
     console.error("[Save-Result Error]", err);
@@ -212,7 +189,6 @@ app.post("/api/save-video", uploadSingleVideo.single("video"), async (req, res) 
   try {
     const gofileData = await uploadToGofile(req.file.path, folderId);
     res.json({ url: gofileData.downloadPage, filename: req.file.filename });
-    uploadFileToR2(req.file.path, req.file.filename, "results").catch(() => {});
   } catch (err) {
     console.error("[Save-Video Error]", err);
     res.status(500).json({ error: "Gofile upload failed" });
@@ -285,7 +261,6 @@ cron.schedule("0 */6 * * *", async () => {
       console.log("[Cron] 삭제 대기 중인 항목이 없습니다.");
     }
   } catch (err) { console.error("[Cron Error]", err.message); }
-  cleanupR2Results().catch(() => {});
 });
 
 app.listen(PORT, "0.0.0.0", () => {
