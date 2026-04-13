@@ -352,7 +352,7 @@ export default function Home() {
                 shotVideos={shotVideos}
                 onUploaded={(url, id, vidId, localUrl) => {
                   setFinalQrUrl(url); // Gofile URL
-                  setFinalPreviewUrl(localUrl); // 로컬 미리보기
+                  setFinalPreviewUrl(localUrl || null); // 로컬 미리보기 (TS 고침)
                   setFinalImageId(id);
                   if (vidId) setFinalVideoId(vidId);
                   setStep("RESULT");
@@ -537,7 +537,7 @@ export default function Home() {
                 shotImages={shots} shotVideos={shotVideos}
                 onUploaded={(url, id, vidId, localUrl) => {
                   setFinalQrUrl(url); // Gofile URL
-                  setFinalPreviewUrl(localUrl); // 로컬 미리보기
+                  setFinalPreviewUrl(localUrl || null); // 로컬 미리보기 (TS 고침)
                   setFinalImageId(id);
                   if (vidId) setFinalVideoId(vidId);
                   setStep("RESULT");
