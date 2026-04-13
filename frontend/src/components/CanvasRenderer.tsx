@@ -8,7 +8,7 @@ interface CanvasRendererProps {
   selectedFrame: string;
   shotImages: string[];
   shotVideos: (Blob | null)[];
-  onUploaded: (serverResultUrl: string, finalImageId: string, videoId?: string, localPreviewUrl?: string) => void;
+  onUploaded: (serverResultUrl: string, finalImageId: string, videoId?: string, localPreviewUrl?: string, localVideoUrl?: string) => void;
   videoDuration?: number;
   frameText?: string;
   frameFont?: string;
@@ -178,7 +178,7 @@ export default function CanvasRenderer({
         throw new Error("사진 서버 저장 실패");
       }
 
-      let uploadedVideoId = "";
+      let localVidUrl = "";
       if (mode === 'video') {
         setLoadingText("브라우저에서 영상을 직접 합성 중입니다 🚀");
         try {
@@ -193,6 +193,7 @@ export default function CanvasRenderer({
             if (ffmpeg) {
               const mp4Data = await composeVideoOnClient(ffmpeg, videoBlobs, selectedFrame, videoDuration, renderedFrameDataUrl);
               const mp4Blob = new Blob([mp4Data as any], { type: 'video/mp4' });
+              localVidUrl = URL.createObjectURL(mp4Blob);
 
               const videoFormData = new FormData();
               videoFormData.append("video", mp4Blob, `${Date.now()}.mp4`);
@@ -217,7 +218,7 @@ export default function CanvasRenderer({
 
       setLoadingText("완료되었습니다!");
       setTimeout(() => {
-        onUploaded(finalImageUrl, finalImageId, uploadedVideoId, finalDataUrl);
+        onUploaded(finalImageUrl, finalImageId, uploadedVideoId, finalDataUrl, localVidUrl);
       }, 1500);
 
     } catch (error: any) {

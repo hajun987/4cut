@@ -21,7 +21,8 @@ export default function Home() {
   const [finalQrUrl, setFinalQrUrl] = useState<string | null>(null);
   const [finalImageId, setFinalImageId] = useState<string | null>(null);
   const [finalVideoId, setFinalVideoId] = useState<string | null>(null);
-  const [finalPreviewUrl, setFinalPreviewUrl] = useState<string | null>(null); // 화면 표시용 로컬 미리보기
+  const [finalPreviewUrl, setFinalPreviewUrl] = useState<string | null>(null); // 화면 표시용 로컬 미리보기 (이미지)
+  const [finalVideoPreviewUrl, setFinalVideoPreviewUrl] = useState<string | null>(null); // 로컬 비디오 URL
   const [externalFrames, setExternalFrames] = useState<string[]>([]);
   const [secretCode, setSecretCode] = useState<string | null>(null);
   const [secretFrameMap, setSecretFrameMap] = useState<Record<string, any>>({});
@@ -288,6 +289,7 @@ export default function Home() {
       <ResultQR 
         url={finalQrUrl} 
         imagePreview={finalPreviewUrl || finalQrUrl} 
+        videoPreview={finalVideoPreviewUrl || undefined}
         imageId={finalImageId} 
         videoId={finalVideoId || undefined} 
       />
@@ -350,9 +352,10 @@ export default function Home() {
                 selectedFrame={selectedFrame}
                 shotImages={shots}
                 shotVideos={shotVideos}
-                onUploaded={(url, id, vidId, localUrl) => {
+                onUploaded={(url, id, vidId, localUrl, localVidUrl) => {
                   setFinalQrUrl(url); // Gofile URL
-                  setFinalPreviewUrl(localUrl || null); // 로컬 미리보기 (TS 고침)
+                  setFinalPreviewUrl(localUrl || null); // 로컬 이미지
+                  setFinalVideoPreviewUrl(localVidUrl || null); // 로컬 비디오
                   setFinalImageId(id);
                   if (vidId) setFinalVideoId(vidId);
                   setStep("RESULT");
@@ -535,9 +538,10 @@ export default function Home() {
               <CanvasRenderer 
                 selectedSlots={selectedSlots} selectedIndices={selectedIndices} selectedFrame={selectedFrame}
                 shotImages={shots} shotVideos={shotVideos}
-                onUploaded={(url, id, vidId, localUrl) => {
+                onUploaded={(url, id, vidId, localUrl, localVidUrl) => {
                   setFinalQrUrl(url); // Gofile URL
-                  setFinalPreviewUrl(localUrl || null); // 로컬 미리보기 (TS 고침)
+                  setFinalPreviewUrl(localUrl || null); // 로컬 이미지
+                  setFinalVideoPreviewUrl(localVidUrl || null); // 로컬 비디오
                   setFinalImageId(id);
                   if (vidId) setFinalVideoId(vidId);
                   setStep("RESULT");

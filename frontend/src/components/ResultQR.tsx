@@ -2,33 +2,41 @@
 
 import { QRCodeSVG } from "qrcode.react";
 
-interface ResultQRProps {
-  url: string;
-  imagePreview?: string;
-  imageId?: string;
-  videoId?: string;
-}
-
-export default function ResultQR({ url, imagePreview, imageId, videoId }: ResultQRProps) {
-  if (!url) return null;
-
-  // 수동 다운로드 실행 함수 (크롬 확장자 소실 이슈 대응)
-  const handleDownload = (fileName: string) => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-    // 💡 ID 접두어(vid_) 또는 확장자로 파일 형식 정확히 판별
-    const isVideo = fileName.startsWith('vid_') || fileName.toLowerCase().endsWith(".mp4");
-    const saveName = isVideo ? "4cut_video.mp4" : "4cut_photo.jpg";
-    const downloadUrl = `${apiUrl}/api/download/${fileName}?name=${encodeURIComponent(saveName)}`;
-    
-    // a 태그를 생성하여 download 속성을 부여하면 브라우저가 파일명을 더 잘 인식합니다.
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.setAttribute("download", saveName);
-    link.style.display = "none";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  interface ResultQRProps {
+    url: string;
+    imagePreview?: string;
+    videoPreview?: string;
+    imageId?: string;
+    videoId?: string;
+  }
+  
+  export default function ResultQR({ url, imagePreview, videoPreview, imageId, videoId }: ResultQRProps) {
+    if (!url) return null;
+  
+    // 수동 다운로드 실행 함수 (R2 대신 로컬 데이터 사용)
+    const handleDownload = (type: 'photo' | 'video') => {
+      const isVideo = type === 'video';
+      const saveName = isVideo ? "4cut_video.mp4" : "4cut_photo.jpg";
+      
+      // 로컬 미리보기 URL이 있으면 그것을 사용, 없으면 백엔드 폴백(Gofile 링크 등)
+      let downloadUrl = isVideo ? videoPreview : imagePreview;
+  
+      if (!downloadUrl) {
+          // 폴백: 만약 로컬에 없다면 기존 백엔드 API 사용 (가급적 로컬 사용 권장)
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+          const fileName = isVideo ? videoId : imageId;
+          if (!fileName) return;
+          downloadUrl = `${apiUrl}/api/download/${fileName}?name=${encodeURIComponent(saveName)}`;
+      }
+      
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.setAttribute("download", saveName);
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
 
   return (
     <div className="min-h-screen bg-zinc-950 p-4 lg:p-12 flex items-center justify-center overflow-x-hidden">
@@ -66,7 +74,7 @@ export default function ResultQR({ url, imagePreview, imageId, videoId }: Result
           <div className="flex flex-col gap-3 w-full max-w-xs lg:max-w-sm mb-8 px-4">
             {imageId && (
               <button 
-                onClick={() => handleDownload(imageId)}
+                onClick={() => handleDownload('photo')}
                 className="px-8 py-4 bg-primary text-white text-base lg:text-lg rounded-full font-black hover:scale-105 active:scale-95 transition-all shadow-[0_10px_20px_rgba(255,71,133,0.3)]"
               >
                 📸 사진 다운로드 (기기 저장)
@@ -74,7 +82,7 @@ export default function ResultQR({ url, imagePreview, imageId, videoId }: Result
             )}
             {videoId && (
               <button 
-                onClick={() => handleDownload(videoId)}
+                onClick={() => handleDownload('video')}
                 className="px-8 py-4 bg-zinc-800 text-white text-base lg:text-lg rounded-full font-black hover:scale-105 active:scale-95 transition-all shadow-lg"
               >
                 🎞️ 영상 다운로드 (기기 저장)
