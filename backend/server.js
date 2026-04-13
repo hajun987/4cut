@@ -80,27 +80,46 @@ async function uploadToGofile(filePath, folderId = null) {
 }
 
 /**
- * Gofile 폴더/파일 이름 업데이트
+ * 안내용 이미지 생성 (@info.jpg, 1:1 비율)
  */
-async function updateGofileContentName(contentId, newName) {
-  if (!GOFILE_TOKEN || !contentId) return;
-  try {
-    const resp = await axios.put(`https://api.gofile.io/contents/${contentId}/update`, {
-      name: newName,
-    }, {
-      headers: {
-        Authorization: `Bearer ${GOFILE_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-    });
-    if (resp.data.status === "ok") {
-      console.log(`[Gofile] 이름 변경 성공: ${newName}`);
-    } else {
-      console.warn(`[Gofile] 이름 변경 실패: ${JSON.stringify(resp.data)}`);
-    }
-  } catch (err) {
-    console.error(`[Gofile Rename Error] ${err.message}`);
-  }
+async function createInstructionImage(targetPath) {
+  const size = 800;
+  const svg = `
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100%" height="100%" fill="#f8f9fa"/>
+      <rect width="90%" height="90%" x="5%" y="5%" rx="20" ry="20" fill="white" stroke="#ff4785" stroke-width="4"/>
+      
+      <text x="50%" y="25%" font-family="Arial, sans-serif" font-size="42" font-weight="900" text-anchor="middle" fill="#ff4785">안내 사항</text>
+      
+      <line x1="10%" y1="35%" x2="90%" y2="35%" stroke="#eee" stroke-width="2"/>
+      
+      <text x="50%" y="45%" font-family="Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#333">
+        촬영하신 네컷사진은
+      </text>
+      <text x="50%" y="50%" font-family="Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#333">
+        24시간 정도 서버에 보관됩니다.
+      </text>
+      
+      <text x="50%" y="65%" font-family="Arial, sans-serif" font-size="24" text-anchor="middle" fill="#666">
+        사진과 영상을 다운받으려면
+      </text>
+      <text x="50%" y="70%" font-family="Arial, sans-serif" font-size="24" text-anchor="middle" fill="#666">
+        파일 목록 우측의
+      </text>
+      
+      <rect x="250" y="750" width="300" height="60" rx="30" ry="30" fill="#f0f0f0"/>
+      <text x="50%" y="790" font-family="Arial, sans-serif" font-size="26" font-weight="bold" text-anchor="middle" fill="#ff4785">
+        📥 Download
+      </text>
+      <text x="50%" y="840" font-family="Arial, sans-serif" font-size="24" text-anchor="middle" fill="#666">
+        버튼을 누르세요.
+      </text>
+    </svg>
+  `;
+
+  await sharp(Buffer.from(svg))
+    .jpeg({ quality: 90 })
+    .toFile(targetPath);
 }
 
 /**
@@ -197,10 +216,16 @@ app.post("/api/save-result", uploadResult.single("image"), async (req, res) => {
       folderId: gofileData.parentFolder 
     });
 
-    // Gofile 폴더 이름 변경 (사용자 친화적인 이름으로)
-    const shortId = req.file.filename.split("_")[1]?.substring(0, 8) || "SHARE";
-    const newFolderName = `네컷사진 다운받기 (24시간 후 삭제) [${shortId}]`;
-    updateGofileContentName(gofileData.parentFolder, newFolderName).catch(() => {});
+    // Gofile 안내 이미지 업로드 (@info.jpg, 1:1 비율)
+    const infoPath = path.join(path.dirname(req.file.path), "@info.jpg");
+    try {
+      await createInstructionImage(infoPath);
+      await uploadToGofile(infoPath, gofileData.parentFolder);
+      if (fs.existsSync(infoPath)) fs.unlinkSync(infoPath);
+      console.log("[Gofile] 안내 이미지(@info.jpg) 업로드 완료");
+    } catch (e) {
+      console.error("[Gofile Info Error]", e.message);
+    }
 
     // R2 트래킹
     trackFolderInR2(gofileData.parentFolder).catch(() => {});
