@@ -43,7 +43,7 @@ const s3Client = new S3Client({
  */
 async function getGofileServer() {
   try {
-    const resp = await axios.get("https://api.gofile.io/getServers");
+    const resp = await axios.get("https://api.gofile.io/servers");
     if (resp.data.status === "ok" && resp.data.data.servers.length > 0) {
       return resp.data.data.servers[0].name;
     }
@@ -83,6 +83,9 @@ async function uploadToGofile(filePath, folderId = null) {
  * Gofile.io 계정의 루트 폴더 ID 조회
  */
 async function getGofileRootId() {
+  const envRootId = process.env.GOFILE_ROOT_ID;
+  if (envRootId) return envRootId; // 환경 변수가 있으면 즉시 사용 (무료 계정 권장)
+
   if (!GOFILE_TOKEN) return null;
   try {
     const resp = await axios.get("https://api.gofile.io/accounts/getDetails", {
@@ -90,7 +93,7 @@ async function getGofileRootId() {
     });
     return resp.data.data.rootFolder;
   } catch (err) {
-    console.error("[Gofile] 루트 ID 조회 실패:", err.message);
+    console.error(`[Gofile] 루트 ID 조회 실패 (403이면 GOFILE_ROOT_ID 설정 필수): ${err.message}`);
     return null;
   }
 }
