@@ -251,7 +251,6 @@ cron.schedule("0 0 * * *", async () => {
   cleanupR2Results().catch(() => {});
 });
 
-const PORT = process.env.PORT || 4000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Backend server listening at http://0.0.0.0:${PORT}`);
 });
