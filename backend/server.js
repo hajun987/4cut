@@ -80,6 +80,30 @@ async function uploadToGofile(filePath, folderId = null) {
 }
 
 /**
+ * Gofile 폴더/파일 이름 업데이트
+ */
+async function updateGofileContentName(contentId, newName) {
+  if (!GOFILE_TOKEN || !contentId) return;
+  try {
+    const resp = await axios.put(`https://api.gofile.io/contents/${contentId}/update`, {
+      name: newName,
+    }, {
+      headers: {
+        Authorization: `Bearer ${GOFILE_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+    });
+    if (resp.data.status === "ok") {
+      console.log(`[Gofile] 이름 변경 성공: ${newName}`);
+    } else {
+      console.warn(`[Gofile] 이름 변경 실패: ${JSON.stringify(resp.data)}`);
+    }
+  } catch (err) {
+    console.error(`[Gofile Rename Error] ${err.message}`);
+  }
+}
+
+/**
  * R2 업로드 헬퍼 (백업용)
  */
 async function uploadFileToR2(filePath, fileName, folder = "results") {
@@ -172,6 +196,11 @@ app.post("/api/save-result", uploadResult.single("image"), async (req, res) => {
       filename: req.file.filename,
       folderId: gofileData.parentFolder 
     });
+
+    // Gofile 폴더 이름 변경 (사용자 친화적인 이름으로)
+    const shortId = req.file.filename.split("_")[1]?.substring(0, 8) || "SHARE";
+    const newFolderName = `네컷사진 다운받기 (24시간 후 삭제) [${shortId}]`;
+    updateGofileContentName(gofileData.parentFolder, newFolderName).catch(() => {});
 
     // R2 트래킹
     trackFolderInR2(gofileData.parentFolder).catch(() => {});
